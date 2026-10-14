@@ -1,7 +1,7 @@
 import AppKit
 import Carbon
 
-let buildVersion = "0.1.1"
+let buildVersion = "0.1.2"
 if CommandLine.arguments.contains("--version") {
     print("demio-overlay \(buildVersion)")
     exit(0)
