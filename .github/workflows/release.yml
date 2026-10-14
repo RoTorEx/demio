@@ -1,0 +1,39 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify tag and architecture
+        run: |
+          test "$(uname -m)" = arm64
+          test "$GITHUB_REF_NAME" = "v$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml)"
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy && rustup default stable
+      - run: make check
+      - run: make smoke-install
+      - uses: actions/upload-artifact@v6
+        with:
+          name: macos-arm64
+          path: ~/construction_side/demio/dist/*
+          if-no-files-found: error
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
+        with:
+          name: macos-arm64
+          path: release-assets
+      - name: Publish verified bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release-assets/*.tar.gz release-assets/*.sha256 release-assets/install.sh --verify-tag --title "Demio ${GITHUB_REF_NAME#v}" --generate-notes

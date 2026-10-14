@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "browser-demo",
+  "name": "Browser request walkthrough",
+  "workspace": ".",
+  "adapter": [".venv/bin/python", "-u", "adapter.py"],
+  "session_seconds": 7200,
+  "steps": [
+    {"id":"intro","title":"Meet the requester","role":"Requester","say":"I am signed in as the requester. I will create a request, switch to the approver, and show the result."},
+    {"id":"fill","title":"Describe the request","role":"Requester","say":"I enter a short description and a justification. Watch the fields fill in before I submit."},
+    {"id":"submit","title":"Submit for approval","role":"Requester","say":"The request is now submitted. The status changes to Awaiting approval."},
+    {"id":"approve","title":"Review and approve","role":"Approver","say":"I switch to the approver role. Here is the request and its justification. I approve it, and the status updates."},
+    {"id":"close","title":"Show the final result","role":"Requester","say":"Back in the requester view, the request is approved. This concludes the walkthrough."}
+  ]
+}

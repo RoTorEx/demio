@@ -1,47 +1,73 @@
-# Business
+# Demio product truth
 
-This document is the durable explanation of what the product means and why it
-behaves as it does. Replace every TODO before relying on it as product truth.
+## Purpose and actors
 
-<!-- VIBE:PROJECT_BRIEF_REQUIRED -->
+A presenter needs to narrate a repeatable demo while automation performs visible
+application steps. A project agent prepares the environment, manifest, and
+adapter. The presenter registers the channel, selects its ID, speaks, and presses
+Next. Viewers see the application; the presenter reads a separate notes window.
 
-## Purpose
+## Concepts and invariants
 
-TODO: What problem does the product solve, for whom, and what outcome matters?
+A channel has a stable ID and a readable name. Ordering the channel list never
+changes identity. Manifests remain owned by their projects. Registry replacement
+requires an explicit flag when it changes the source file. Removing registration
+preserves source data.
 
-## Actors
+A step contains its ID, title, role, narration text, and operation timeout.
+The presenter speaks; there is no synthesized audio. The remote window contains
+only Back and Next. Speaker notes are independently movable and resizable.
+Global F7/F9 are available while the helper is alive; there is no hide toggle.
 
-TODO: Who interacts with the product or is affected by its decisions?
+Next executes the next uncompleted step once. Back and forward navigation through
+completed steps invoke read-only preview. They neither undo nor repeat writes.
+An adapter error blocks further actions in that session. Timeouts leave outcomes
+unknown, with no automatic retry. A new run is a new environment, not a resume.
+Project adapters must make preparation safe for repeated fresh runs.
 
-## Core concepts
+## Limits and ownership
 
-TODO: Define domain terms precisely. Do not assume their everyday meanings.
+The first minor supports macOS 14+ Apple Silicon, matching the owner's machine;
+changing targets requires native build and install verification. The Rust core
+uses a Swift/AppKit helper for native controls. Adapter languages are unrestricted.
+No API keys, account defaults, or paid budgets are provided by the remote.
+The bundled example is local and incurs no model spend.
 
-## Business flows
+Defaults: 7,200 seconds per interactive session (two-hour rehearsal), 120 seconds
+per operation (normal browser operations plus load margin). Manifest limits are
+1–86,400 session seconds and 1–3,600 operation seconds, permitting long rehearsals
+while rejecting zero/unbounded waits. Session time begins after preparation.
+An in-flight interactive operation is stopped when the session expires; scripted
+`--auto` checks the session deadline between operations and uses operation limits
+while waiting. Preparation uses the first step's timeout. Cleanup has a two-second
+grace before the owned process group is terminated. These are local operational
+limits, never an authorization or money limit. Changing them affects interruption
+and recovery; CLI timeout/failure tests protect the blocking boundary.
 
-TODO: Describe the main decisions and state transitions, not UI click paths.
+IDs accept 1–64 ASCII letters, digits, hyphens, underscores, starting alphanumeric,
+so they remain predictable CLI arguments. Step IDs must be unique. JSON schema
+version 1 rejects unknown manifest fields to catch agent mistakes. Validation and
+registry tests protect these contracts.
 
-## Invariants
+## Boundaries
 
-TODO: State what must never become false, even during failures or migrations.
+Adapters are trusted local executable code, not a sandbox. Their check and preview
+operations must be read-only. Preparation, browser scrolling/highlighting, writes,
+verification, credentials, budget enforcement, and cleanup belong to the project
+adapter. It must keep owned children in its process group and must not daemonize.
+Demio terminates that group and deletes its per-session runtime directory at exit.
+A parent crash cannot guarantee cleanup of arbitrary external side effects.
 
-## Decisions and numbers
+Screen recording, invisibility to capture, speech synthesis, a phone endpoint,
+and generic AI-driven application control are outside this first minor. Notes and
+controls may be captured; record the application window or a selected region.
 
-Document every decision-bearing value. Ordinary implementation literals do not
-belong here.
+## Source map
 
-| Value | Unit | Meaning | Rationale/source | Change impact | Protecting tests |
-|---|---|---|---|---|---|
-| TODO | TODO | TODO | TODO | TODO | TODO |
-
-## Module map
-
-Create `business/<module>.md` only when a business domain needs focused context.
-
-| Code area | Business module | Why to read it |
-|---|---|---|
-| TODO | TODO | TODO |
-
-## Non-goals
-
-TODO: What does the product intentionally not do?
+- `src/registry.rs`: manifests, stable identity, configuration.
+- `src/run.rs`: navigation, journaling, terminal and native integration.
+- `src/protocol.rs`: persistent adapter, timeouts, process lifecycle.
+- `native/Overlay.swift`: controls, movable/resizable speaker notes.
+- `docs/contracts/adapter.md`: project-agent integration and protocol.
+- `examples/browser`: local browser walkthrough.
+- `scripts`, `.github/workflows`: packaging, installation, releases.
