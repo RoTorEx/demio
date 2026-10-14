@@ -46,7 +46,9 @@ Two independent floating windows appear during an interactive session:
 
 - A compact movable gray glass remote containing only **Back** and **Next**.
 - A movable, resizable speaker notes window showing the step, role, status, and
-  text you read aloud. Long text scrolls; resizing changes its wrapping.
+  text you read aloud. Long text scrolls; resizing changes its wrapping. Use
+  **A− / A+** to change font size and **Left / Center / Right** for alignment.
+  These preferences persist in `speaker-notes.json` beside the CLI config.
 
 F9 advances; F7 previews the previous completed step. Depending on your keyboard
 settings, use Fn+F9 / Fn+F7. In the terminal, Enter advances and q / Ctrl+C exits.

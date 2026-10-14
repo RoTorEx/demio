@@ -9,7 +9,7 @@ base=Path.home()/'construction_side/demio/checks';base.mkdir(parents=True,exist_
 with tempfile.TemporaryDirectory(dir=base) as temporary:
     root=Path(temporary)
     (root/'panel.json').write_text(json.dumps({'status':'Ready','channel':'Native check','step':'2/5','role':'Requester','title':'Read the speaker notes','say':'The presenter speaks. The notes window moves and resizes independently from the two-button remote.','detail':'Ready'}))
-    result=subprocess.run([sys.argv[1],temporary,str(os.getpid()),'--smoke'],text=True,capture_output=True,timeout=15)
+    result=subprocess.run([sys.argv[1],temporary,str(os.getpid()),'--smoke'],text=True,capture_output=True,timeout=15,env=dict(os.environ,DEMIO_CONFIG=str(root/'config.toml')))
     assert result.returncode==0,(result.stdout,result.stderr)
     assert result.stdout.splitlines()==['previous','next']
     assert (root/'notes.png').is_file() and (root/'remote.png').is_file()

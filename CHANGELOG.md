@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Add speaker-notes font size controls and left, center, or right alignment,
+  preserved across steps and sessions without adding controls to the remote.
+
 ## [0.1.1] - 2026-10-14
 
 - Resolve the latest release through the public release redirect, avoiding

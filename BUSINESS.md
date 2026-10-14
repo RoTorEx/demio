@@ -17,6 +17,14 @@ preserves source data.
 A step contains its ID, title, role, narration text, and operation timeout.
 The presenter speaks; there is no synthesized audio. The remote window contains
 only Back and Next. Speaker notes are independently movable and resizable.
+A−/A+ changes notes font size in two-point increments, from 14 to 48 points,
+with a 22-point default. This reading range keeps small text legible and large
+text usable with wrapping. Left, center, and right alignment apply to the full
+cue, including newly loaded steps. Font size and alignment persist beside the
+CLI config in `speaker-notes.json`; malformed settings fall back to defaults and
+out-of-range sizes clamp to the range. Native smoke checks exercise controls,
+all alignments, resizing, and preference reload. Changing the range affects
+readability and control bounds.
 Global F7/F9 are available while the helper is alive; there is no hide toggle.
 
 Next executes the next uncompleted step once. Back and forward navigation through
