@@ -34,9 +34,21 @@ demio doctor browser-demo
 demio run browser-demo
 ```
 
-`list` shows IDs and names; `run` takes an exact ID, independent of list order.
+`list` shows stable IDs, project-prefixed names, descriptions, and creation times
+in Europe/Warsaw with the date's CET/CEST offset. Newest scenarios appear first;
+the selector uses the same order and shows the selected scenario's description.
+`run` takes an exact ID, independent of list order. JSON output adds `project`,
+`description`, `created_at`, and `display_name` while retaining the original `name`.
 Run `demio` without arguments for the interactive selector. Registration stores a
 reference to the manifest, so project-owned workflow changes are read on launch.
+`demio init` records `created_at` automatically in the manifest. For manually
+authored manifests, `register` adds it if missing and preserves it on subsequent
+registrations. Registration therefore writes a missing timestamp to the project
+manifest. Existing legacy manifests remain readable: the project defaults to the
+workspace directory name, description may be empty, and unrecorded dates use
+filesystem creation time where available (otherwise displayed as unknown).
+Metadata snapshots keep unavailable channels identifiable.
+
 Use `register FILE --replace` to explicitly replace an ID registered elsewhere.
 `unregister ID` removes only the registry entry.
 

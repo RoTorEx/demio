@@ -20,7 +20,7 @@ use std::{
     },
     time::Duration,
 };
-const HELP: &str = "Demio — one remote for project demos\n\nUsage: demio [COMMAND]\n\n  list [--json]                 List stable channel IDs and names\n  register FILE [--replace]      Register a project-owned channel manifest\n  unregister ID                 Remove registry entry, preserve project files\n  validate FILE                 Validate channel without executing code\n  doctor ID                     Ask adapter for a read-only readiness check\n  run ID [--no-overlay] [--auto]  Run by exact channel ID\n  init DIRECTORY                Scaffold a browser demo / adapter example\n  setup-config                  Create missing configuration\n  config                        Print configuration and path\n  themes                        List themes\n  theme NAME                    Set terminal theme\n  update                        Install latest verified release\n  help / --help                 Show this help\n  version / --version           Show version\n\nWithout a command: select a channel interactively (list outside a terminal).\nF9 / Enter: next; F7: previous view; q / Ctrl+C: stop.\n";
+const HELP: &str = "Demio — one remote for project demos\n\nUsage: demio [COMMAND]\n\n  list [--json]                 List projects, descriptions and creation times\n  register FILE [--replace]      Register a project-owned channel manifest\n  unregister ID                 Remove registry entry, preserve project files\n  validate FILE                 Validate channel without executing code\n  doctor ID                     Ask adapter for a read-only readiness check\n  run ID [--no-overlay] [--auto]  Run by exact channel ID\n  init DIRECTORY                Scaffold a browser demo / adapter example\n  setup-config                  Create missing configuration\n  config                        Print configuration and path\n  themes                        List themes\n  theme NAME                    Set terminal theme\n  update                        Install latest verified release\n  help / --help                 Show this help\n  version / --version           Show version\n\nWithout a command: select a channel interactively (list outside a terminal).\nF9 / Enter: next; F7: previous view; q / Ctrl+C: stop.\n";
 fn main() {
     if let Err(error) = application() {
         eprintln!("Error: {error:#}");
@@ -173,10 +173,7 @@ fn application() -> Result<()> {
     Ok(())
 }
 fn list(config: &Config, json: bool) -> Result<()> {
-    let entries: Vec<_> = config.channels.iter().map(|(id,entry)| {
-        let result=config.resolve(id);
-        serde_json::json!({"id":id,"name":result.as_ref().map(|r|r.0.name.as_str()).unwrap_or(&entry.name),"manifest":entry.manifest,"available":result.is_ok()})
-    }).collect();
+    let entries = config.listing();
     if json {
         println!("{}", serde_json::to_string_pretty(&entries)?);
     } else if entries.is_empty() {
@@ -184,16 +181,28 @@ fn list(config: &Config, json: bool) -> Result<()> {
             "No channels registered.\nCreate one: demio init ./my-demo\nRegister it: demio register ./my-demo/channel.json"
         );
     } else {
-        println!("{:<24} NAME", "ID");
+        println!("{:<24} NAME / PROJECT", "ID");
         for entry in entries {
             println!(
                 "{:<24} {}{}",
-                entry["id"].as_str().unwrap_or(""),
-                entry["name"].as_str().unwrap_or(""),
-                if entry["available"] == true {
+                entry.id,
+                entry.display_name,
+                if entry.available {
                     ""
                 } else {
                     " [unavailable]"
+                }
+            );
+            println!(
+                "                         Created: {} Warsaw",
+                entry.created_label()
+            );
+            println!(
+                "                         {}\n",
+                if entry.description.trim().is_empty() {
+                    "No description provided"
+                } else {
+                    &entry.description
                 }
             );
         }
@@ -215,7 +224,8 @@ fn choose(config: &Config, cancelled: &AtomicBool) -> Result<Option<String>> {
     terminal::enable_raw_mode()?;
     execute!(io::stdout(), EnterAlternateScreen, cursor::Hide)?;
     let _restore = Restore;
-    let ids: Vec<_> = config.channels.keys().cloned().collect();
+    let entries = config.listing();
+    let ids: Vec<_> = entries.iter().map(|entry| entry.id.clone()).collect();
     let mut selected = 0;
     loop {
         if cancelled.load(Ordering::Relaxed) {
@@ -232,9 +242,15 @@ fn choose(config: &Config, cancelled: &AtomicBool) -> Result<Option<String>> {
                 " {}  {:<24} {}\r\n",
                 if n == selected { ">" } else { " " },
                 id,
-                config.channels[id].name
+                entries[n].display_name
             );
         }
+        let selected_entry = &entries[selected];
+        print!(
+            "\r\n{}\r\nCreated: {} Warsaw\r\n",
+            selected_entry.description.replace('\n', "\r\n"),
+            selected_entry.created_label()
+        );
         print!("\r\n↑/↓ Select   Enter Run   q Quit\r\n");
         io::stdout().flush()?;
         if event::poll(Duration::from_millis(500))? {
@@ -257,9 +273,12 @@ fn scaffold(path: &Path) -> Result<()> {
         }
     }
     fs::create_dir_all(path)?;
+    let mut channel: serde_json::Value =
+        serde_json::from_str(include_str!("../examples/browser/channel.json"))?;
+    channel["created_at"] = serde_json::to_value(registry::now())?;
     fs::write(
         path.join("channel.json"),
-        include_str!("../examples/browser/channel.json"),
+        format!("{}\n", serde_json::to_string_pretty(&channel)?),
     )?;
     fs::write(
         path.join("adapter.py"),

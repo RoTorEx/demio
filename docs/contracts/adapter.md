@@ -5,7 +5,16 @@ project, and register `channel.json`. Follow that project's authorization rules;
 registration does not grant permission for external writes or paid calls.
 
 Start from `demio init DIRECTORY`. Adapt the JSON manifest's ID, name, workspace,
-argument-array adapter command, session_seconds, and steps. Each step supplies a
+argument-array adapter command, session_seconds, and steps. Set `project` to the
+project's readable name and `description` to what viewers will see and the
+expected outcome. Keep `name` concise without repeating the project: Demio
+renders `Project · Name`. The agent may derive these fields from the user's
+natural-language request; Demio does not call an AI model to generate them.
+`init` sets `created_at` automatically; preserve it when editing or regenerating
+the scenario. If authoring JSON manually, omit that field and let `register`
+record the timestamp, rather than inventing one. Dates are RFC3339 with an offset,
+preserved in the manifest and rendered in Europe/Warsaw. All listings show newest
+creation times first, with ID ordering as a deterministic tie-breaker. Each step supplies a
 unique ID, title, role, `say` text for the presenter, and optional timeout_seconds
 (default 120). The default workspace is the manifest's directory. Relative
 workspaces and adapter executable paths resolve there. IDs are permanent,

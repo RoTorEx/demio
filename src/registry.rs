@@ -1,4 +1,6 @@
 use anyhow::{Context, Result, bail};
+use chrono::{DateTime, FixedOffset, Utc};
+use chrono_tz::Europe::Warsaw;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -32,6 +34,12 @@ pub struct Channel {
     pub schema_version: u32,
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub project: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<DateTime<FixedOffset>>,
     #[serde(default = "default_root")]
     pub workspace: String,
     pub adapter: Vec<String>,
@@ -80,6 +88,21 @@ impl Channel {
         }
         Ok(())
     }
+    pub fn project_name(&self, manifest: &Path) -> String {
+        if !self.project.trim().is_empty() {
+            return self.project.trim().into();
+        }
+        self.workspace_path(manifest)
+            .ok()
+            .and_then(|path| {
+                path.file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+            })
+            .unwrap_or_else(|| "Unspecified project".into())
+    }
+    pub fn display_name(&self, manifest: &Path) -> String {
+        prefixed_name(&self.project_name(manifest), &self.name)
+    }
     pub fn workspace_path(&self, manifest: &Path) -> Result<PathBuf> {
         let root = manifest
             .parent()
@@ -110,6 +133,12 @@ pub fn validate_id(id: &str) -> Result<()> {
 pub struct Entry {
     pub name: String,
     pub manifest: PathBuf,
+    #[serde(default)]
+    pub project: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub created_at: Option<DateTime<FixedOffset>>,
 }
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(default)]
@@ -159,6 +188,39 @@ pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
     }
     Ok(())
 }
+pub fn now() -> DateTime<FixedOffset> {
+    Utc::now().with_timezone(&Warsaw).fixed_offset()
+}
+pub fn prefixed_name(project: &str, name: &str) -> String {
+    let prefix = format!("{project} · ");
+    if name.starts_with(&prefix) {
+        name.into()
+    } else {
+        format!("{prefix}{name}")
+    }
+}
+#[derive(Serialize)]
+pub struct Listing {
+    pub id: String,
+    pub name: String,
+    pub display_name: String,
+    pub project: String,
+    pub description: String,
+    pub created_at: Option<DateTime<FixedOffset>>,
+    pub manifest: PathBuf,
+    pub available: bool,
+}
+impl Listing {
+    pub fn created_label(&self) -> String {
+        self.created_at
+            .map(|date| {
+                date.with_timezone(&Warsaw)
+                    .format("%Y-%m-%d %H:%M:%S %Z (UTC%:z)")
+                    .to_string()
+            })
+            .unwrap_or_else(|| "Unknown creation time".into())
+    }
+}
 impl Config {
     pub fn load() -> Result<Self> {
         let path = config_path()?;
@@ -189,9 +251,59 @@ impl Config {
         channel.workspace_path(&entry.manifest)?;
         Ok((channel, entry.manifest.clone()))
     }
+    pub fn listing(&self) -> Vec<Listing> {
+        let mut rows: Vec<_> = self
+            .channels
+            .iter()
+            .map(|(id, entry)| {
+                let resolved = self.resolve(id);
+                let (name, project, description, created_at) = match &resolved {
+                    Ok((channel, path)) => (
+                        channel.name.clone(),
+                        channel.project_name(path),
+                        channel.description.clone(),
+                        channel.created_at.or(entry.created_at),
+                    ),
+                    Err(_) => (
+                        entry.name.clone(),
+                        if entry.project.is_empty() {
+                            "Unspecified project".into()
+                        } else {
+                            entry.project.clone()
+                        },
+                        entry.description.clone(),
+                        entry.created_at,
+                    ),
+                };
+                let created_at = created_at.or_else(|| {
+                    fs::metadata(&entry.manifest)
+                        .ok()?
+                        .created()
+                        .ok()
+                        .map(|time| DateTime::<Utc>::from(time).fixed_offset())
+                });
+                Listing {
+                    id: id.clone(),
+                    display_name: prefixed_name(&project, &name),
+                    name,
+                    project,
+                    description,
+                    created_at,
+                    manifest: entry.manifest.clone(),
+                    available: resolved.is_ok(),
+                }
+            })
+            .collect();
+        rows.sort_by(|a, b| {
+            b.created_at
+                .cmp(&a.created_at)
+                .then_with(|| a.id.cmp(&b.id))
+        });
+        rows
+    }
     pub fn register(&mut self, path: &Path, replace: bool) -> Result<String> {
         let manifest = path.canonicalize().context("Manifest does not exist")?;
-        let channel = Channel::load(&manifest)?;
+        let mut channel = Channel::load(&manifest)?;
         channel.workspace_path(&manifest)?;
         if let Some(old) = self.channels.get(&channel.id) {
             if old.manifest != manifest && !replace {
@@ -201,14 +313,60 @@ impl Config {
                 );
             }
         }
+        if channel.created_at.is_none() {
+            // Preserve the original scenario date when the same manifest is edited.
+            channel.created_at = self
+                .channels
+                .get(&channel.id)
+                .filter(|old| old.manifest == manifest)
+                .and_then(|old| old.created_at)
+                .or_else(|| Some(now()));
+            let mut document: serde_json::Value = serde_json::from_slice(&fs::read(&manifest)?)?;
+            document["created_at"] = serde_json::to_value(channel.created_at)?;
+            let mut bytes = serde_json::to_vec_pretty(&document)?;
+            bytes.push(b'\n');
+            atomic_write(&manifest, &bytes)?;
+        }
         self.channels.insert(
             channel.id.clone(),
             Entry {
+                project: channel.project_name(&manifest),
+                description: channel.description,
+                created_at: channel.created_at,
                 name: channel.name,
                 manifest,
             },
         );
         self.save()?;
         Ok(channel.id)
+    }
+}
+
+#[cfg(test)]
+mod metadata_tests {
+    use super::*;
+    #[test]
+    fn warsaw_creation_labels_follow_the_event_date() {
+        let mut row = Listing {
+            id: "demo".into(),
+            name: "Example".into(),
+            display_name: "Project · Example".into(),
+            project: "Project".into(),
+            description: "Description".into(),
+            created_at: Some(DateTime::parse_from_rfc3339("2026-07-01T12:00:00Z").unwrap()),
+            manifest: "channel.json".into(),
+            available: true,
+        };
+        assert!(row.created_label().contains("14:00:00 CEST (UTC+02:00)"));
+        row.created_at = Some(DateTime::parse_from_rfc3339("2026-01-01T12:00:00Z").unwrap());
+        assert!(row.created_label().contains("13:00:00 CET (UTC+01:00)"));
+    }
+    #[test]
+    fn project_prefix_is_not_duplicated() {
+        assert_eq!(prefixed_name("Project", "Example"), "Project · Example");
+        assert_eq!(
+            prefixed_name("Project", "Project · Example"),
+            "Project · Example"
+        );
     }
 }

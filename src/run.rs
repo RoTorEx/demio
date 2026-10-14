@@ -209,6 +209,8 @@ pub fn run(
     no_overlay: bool,
     cancelled: Arc<AtomicBool>,
 ) -> Result<()> {
+    let mut channel = channel;
+    channel.name = channel.display_name(&manifest);
     let scratch = Scratch::new()?;
     let worker = Worker::start(&channel, &manifest, &scratch.0)?;
     println!("Preparing {} [{}]…", channel.name, channel.id);

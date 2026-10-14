@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Show project-prefixed scenario names, descriptions and Warsaw creation times
+  in lists and the selector, ordered newest first while preserving run IDs.
+- Record creation timestamps automatically during init/registration, preserve
+  them across edits, and retain metadata for unavailable scenario files.
+- Extend the agent contract with natural-language naming and outcome descriptions.
+
 ## [0.1.2] - 2026-10-14
 
 - Add speaker-notes font size controls and left, center, or right alignment,

@@ -39,6 +39,31 @@ for line in sys.stdin:
     listing=json.loads(cli('list','--json').stdout)
     assert [c['id'] for c in listing] == ['a-demo','z-demo']
     assert listing[1]['name']=='Test z-demo'
+    assert listing[1]['project'] and listing[1]['created_at']
+    created=json.loads(normal.read_text())['created_at']
+    cli('register',str(normal))
+    assert json.loads(normal.read_text())['created_at']==created
+    # Explicit dates sort by actual instant, rather than list IDs or local clocks.
+    older=manifest('older',['one']);data=json.loads(older.read_text());data.update(project='Archive',description='Earlier scenario',created_at='2026-01-01T12:00:00+01:00');older.write_text(json.dumps(data))
+    newer=manifest('newer',['one']);data=json.loads(newer.read_text());data.update(project='Payments',description='Verify an approval result',created_at='2026-07-01T12:00:00+02:00');newer.write_text(json.dumps(data))
+    cli('register',str(older));cli('register',str(newer))
+    ordered=json.loads(cli('list','--json').stdout)
+    positions={c['id']:n for n,c in enumerate(ordered)}
+    assert positions['newer']<positions['older']
+    item=next(c for c in ordered if c['id']=='newer')
+    assert item['display_name']=='Payments · Test newer' and item['description']=='Verify an approval result'
+    assert item['created_at']=='2026-07-01T12:00:00+02:00'
+    output=cli('list').stdout
+    assert 'Payments · Test newer' in output and 'Verify an approval result' in output
+    assert 'CEST (UTC+02:00)' in output and 'CET (UTC+01:00)' in output
+    # Renaming or describing an existing scenario does not change its creation date.
+    data=json.loads(newer.read_text());data['name']='Renamed';data['description']='Changed';newer.write_text(json.dumps(data));cli('register',str(newer))
+    assert json.loads(newer.read_text())['created_at']=='2026-07-01T12:00:00+02:00'
+    newer.unlink()
+    unavailable=next(c for c in json.loads(cli('list','--json').stdout) if c['id']=='newer')
+    assert not unavailable['available'] and unavailable['project']=='Payments' and unavailable['description']=='Changed'
+    invalid_date=manifest('invalid-date',['one']);data=json.loads(invalid_date.read_text());data['created_at']='yesterday';invalid_date.write_text(json.dumps(data));cli('validate',str(invalid_date),ok=False)
+
     alternate=root/'alternate.json';alternate.write_bytes(normal.read_bytes())
     cli('register',str(alternate),ok=False)
     cli('register',str(alternate),'--replace')
@@ -87,6 +112,7 @@ for line in sys.stdin:
     duplicate=manifest('duplicate',['same','same']);cli('validate',str(duplicate),ok=False)
     cli('unregister','z-demo');assert alternate.exists()
     cli('init',str(root/'example'));cli('validate',str(root/'example/channel.json'))
+    example=json.loads((root/'example/channel.json').read_text());assert example['created_at'] and example['project']=='Demio' and example['description']
     cli('init',str(root/'example'),ok=False)
     cli('theme','ocean');assert 'ocean *' in cli('themes').stdout
     cli('theme','unknown',ok=False)

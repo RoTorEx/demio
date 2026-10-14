@@ -9,8 +9,24 @@ Next. Viewers see the application; the presenter reads a separate notes window.
 
 ## Concepts and invariants
 
-A channel has a stable ID and a readable name. Ordering the channel list never
-changes identity. Manifests remain owned by their projects. Registry replacement
+A channel has a stable ID, readable name, project, description, and creation
+time. Names display with `Project · ` as a prefix, added once; JSON also preserves
+the raw name. Description states the visible flow and expected result. An agent
+can derive naming and descriptions from a natural-language brief. Demio itself
+does not generate workflows with AI.
+
+`init` records creation time at scenario creation in RFC3339. `register` fills a
+missing timestamp in manually authored manifests and preserves existing values.
+Re-registering edits does not reset the date. Manifests retain source offsets;
+all human-readable timestamps use Europe/Warsaw with date-specific CET/CEST and
+UTC offset. Lists and the selector sort by actual instant, newest first, then ID
+for ties; unknown dates come last. Legacy manifests derive a missing project from
+the workspace directory and may have empty descriptions. Their unrecorded dates
+fall back to filesystem creation time, which is an approximation for copied or
+checked-out files. Unavailable manifests use the last registered metadata snapshot.
+Metadata tests cover date order, edits, missing manifests, and summer/winter time.
+
+Ordering the channel list never changes identity. Manifests remain owned by their projects. Registry replacement
 requires an explicit flag when it changes the source file. Removing registration
 preserves source data.
 
