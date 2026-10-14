@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-14
+
 - Add a Rust CLI with stable channel IDs and names, exact-ID execution, and an
   interactive selector following the personal CLI configuration/theme interface.
 - Add persistent project adapters with verified step completion, operation and
