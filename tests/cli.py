@@ -44,23 +44,34 @@ for line in sys.stdin:
     cli('register',str(normal))
     assert json.loads(normal.read_text())['created_at']==created
     # Explicit dates sort by actual instant, rather than list IDs or local clocks.
-    older=manifest('older',['one']);data=json.loads(older.read_text());data.update(project='Archive',description='Earlier scenario',created_at='2026-01-01T12:00:00+01:00');older.write_text(json.dumps(data))
-    newer=manifest('newer',['one']);data=json.loads(newer.read_text());data.update(project='Payments',description='Verify an approval result',created_at='2026-07-01T12:00:00+02:00');newer.write_text(json.dumps(data))
+    older=manifest('a-older',['one']);data=json.loads(older.read_text());data.update(project='Archive',description='Earlier scenario',created_at='2026-01-01T12:00:00+01:00');older.write_text(json.dumps(data))
+    newer=manifest('z-newer',['one']);data=json.loads(newer.read_text());data.update(project='Payments',description='Verify an approval result',created_at='2026-07-01T12:00:00+02:00');newer.write_text(json.dumps(data))
     cli('register',str(older));cli('register',str(newer))
     ordered=json.loads(cli('list','--json').stdout)
     positions={c['id']:n for n,c in enumerate(ordered)}
-    assert positions['newer']<positions['older']
-    item=next(c for c in ordered if c['id']=='newer')
-    assert item['display_name']=='Payments · Test newer' and item['description']=='Verify an approval result'
+    assert positions['z-newer']<positions['a-older']
+    offset=manifest('a-offset',['one']);data=json.loads(offset.read_text());data['created_at']='2026-07-01T11:00:00Z';offset.write_text(json.dumps(data));cli('register',str(offset))
+    order=[item['id'] for item in json.loads(cli('list','--json').stdout)]
+    assert order.index('a-offset')<order.index('z-newer')
+    # Loading an old registry/manifest stays read-only and derives its project.
+    legacy=manifest('legacy',['one']);legacy_config=root/'legacy.toml'
+    legacy_text='theme = "calm"\n[channels.legacy]\nname = "Legacy"\nmanifest = '+json.dumps(str(legacy))+'\n'
+    legacy_config.write_text(legacy_text)
+    result=subprocess.run([binary,'list','--json'],env=dict(env,DEMIO_CONFIG=str(legacy_config)),capture_output=True,text=True,check=True)
+    legacy_item=json.loads(result.stdout)[0]
+    assert legacy_item['project']==root.name and legacy_item['available']
+    assert legacy_config.read_text()==legacy_text and 'created_at' not in json.loads(legacy.read_text())
+    item=next(c for c in ordered if c['id']=='z-newer')
+    assert item['display_name']=='Payments · Test z-newer' and item['description']=='Verify an approval result'
     assert item['created_at']=='2026-07-01T12:00:00+02:00'
     output=cli('list').stdout
-    assert 'Payments · Test newer' in output and 'Verify an approval result' in output
+    assert 'Payments · Test z-newer' in output and 'Verify an approval result' in output
     assert 'CEST (UTC+02:00)' in output and 'CET (UTC+01:00)' in output
     # Renaming or describing an existing scenario does not change its creation date.
     data=json.loads(newer.read_text());data['name']='Renamed';data['description']='Changed';newer.write_text(json.dumps(data));cli('register',str(newer))
     assert json.loads(newer.read_text())['created_at']=='2026-07-01T12:00:00+02:00'
     newer.unlink()
-    unavailable=next(c for c in json.loads(cli('list','--json').stdout) if c['id']=='newer')
+    unavailable=next(c for c in json.loads(cli('list','--json').stdout) if c['id']=='z-newer')
     assert not unavailable['available'] and unavailable['project']=='Payments' and unavailable['description']=='Changed'
     invalid_date=manifest('invalid-date',['one']);data=json.loads(invalid_date.read_text());data['created_at']='yesterday';invalid_date.write_text(json.dumps(data));cli('validate',str(invalid_date),ok=False)
 
