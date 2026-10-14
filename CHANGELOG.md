@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Resolve the latest release through the public release redirect, avoiding
+  unauthenticated GitHub API rate limits during installation and self-update.
+
 ## [0.1.0] - 2026-10-14
 
 - Add a Rust CLI with stable channel IDs and names, exact-ID execution, and an

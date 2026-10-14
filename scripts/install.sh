@@ -21,7 +21,8 @@ stage=$(mktemp -d "${TMPDIR:-/tmp}/demio-install.XXXXXXXX")
 trap 'rm -rf "$stage"' EXIT HUP INT TERM
 if [ -z "$archive" ]; then
   if [ -z "$version" ]; then
-    version=$(curl -fsSL https://api.github.com/repos/RoTorEx/demio/releases/latest | python3 -c 'import json,sys;print(json.load(sys.stdin)["tag_name"].removeprefix("v"))')
+    latest_url=$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/RoTorEx/demio/releases/latest)
+    version=${latest_url##*/v}
   fi
   case "$version" in *[!0-9.]*|'') echo 'Invalid release version' >&2; exit 1 ;; esac
   file="demio-v${version}-aarch64-apple-darwin.tar.gz"
