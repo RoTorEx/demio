@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-14
+
 - Resolve the latest release through the public release redirect, avoiding
   unauthenticated GitHub API rate limits during installation and self-update.
 
