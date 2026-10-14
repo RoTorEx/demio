@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-14
+
 - Show project-prefixed scenario names, descriptions and Warsaw creation times
   in lists and the selector, ordered newest first while preserving run IDs.
 - Record creation timestamps automatically during init/registration, preserve
