@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-19
+
 - Restore the original presenter remote's capture-exclusion flag on both native
   windows, including speaker notes. Add a native smoke guard for both flags;
   modern ScreenCaptureKit recorders may still capture these windows.
