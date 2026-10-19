@@ -71,9 +71,14 @@ Back is a **view**, not undo. Moving forward through completed steps previews
 without repeating writes. Next is blocked while working or after an error.
 Timeouts report an unknown outcome and never trigger automatic retries.
 
-The windows can appear in a full-display recording. Position them outside the
-recorded region or record only the application window. This version does not
-promise capture exclusion and does not include recording or a phone server.
+Both windows request capture exclusion (`NSWindow.sharingType = .none`), matching
+the original presenter remote. This keeps controls and notes visible to the
+presenter while excluding them in recorders that honor that flag. Modern
+ScreenCaptureKit recorders, including full-display recording through ⌘⇧5 on newer
+macOS versions, can ignore it. Check a short saved recording on the recording Mac
+before a demo. If either window appears, position both outside the recorded region
+or use a recorder that explicitly excludes Demio. Demio does not include recording
+or a phone server.
 
 ## Browser example
 

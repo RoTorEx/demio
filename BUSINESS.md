@@ -82,9 +82,15 @@ adapter. It must keep owned children in its process group and must not daemonize
 Demio terminates that group and deletes its per-session runtime directory at exit.
 A parent crash cannot guarantee cleanup of arbitrary external side effects.
 
-Screen recording, invisibility to capture, speech synthesis, a phone endpoint,
-and generic AI-driven application control are outside this first minor. Notes and
-controls may be captured; record the application window or a selected region.
+Presenter notes and controls should remain visible to the presenter and absent
+from the demo recording. Both native panels request the same legacy capture
+exclusion (`NSWindow.sharingType = .none`) as the original project-specific remote;
+the native smoke check protects this setting on both windows. Modern macOS
+ScreenCaptureKit recorders may ignore it, so the flag is not a universal guarantee.
+Verify a short saved output with the actual recorder and macOS version. Where the
+flag is ignored, exclude Demio in the recorder or keep both panels outside the
+selected recording region. Screen recording itself, speech synthesis, a phone
+endpoint, and generic AI-driven application control remain outside this first minor.
 
 ## Source map
 

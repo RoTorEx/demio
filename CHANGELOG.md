@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Restore the original presenter remote's capture-exclusion flag on both native
+  windows, including speaker notes. Add a native smoke guard for both flags;
+  modern ScreenCaptureKit recorders may still capture these windows.
+
 ## [0.1.3] - 2026-10-14
 
 - Show project-prefixed scenario names, descriptions and Warsaw creation times

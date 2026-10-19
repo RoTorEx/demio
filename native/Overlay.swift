@@ -65,6 +65,9 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
         var style: NSWindow.StyleMask = [.titled, .nonactivatingPanel]
         if resizable { style.insert(.resizable) }
         let window = NSPanel(contentRect: rect, styleMask: style, backing: .buffered, defer: false)
+        // Preserve the original presenter panel's exclusion from legacy capture.
+        // ScreenCaptureKit recorders may ignore this flag on newer macOS versions.
+        window.sharingType = .none
         window.title = title
         window.level = .floating
         window.isFloatingPanel = true
@@ -141,6 +144,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
     func smoke() {
+        guard remote.sharingType == .none, notes.sharingType == .none else { exit(11) }
         guard let buttons = (remote.contentView?.subviews.first as? NSStackView)?.arrangedSubviews as? [NSButton], buttons.count == 2,
               !remote.styleMask.contains(.resizable), notes.styleMask.contains(.resizable), !cue.string.isEmpty else { exit(3) }
         let original = notes.frame
@@ -175,7 +179,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 }
             }
         }
-        fputs("Native UI: two remote controls, move/resize, font size, alignment and saved preferences passed.\n", stderr)
+        fputs("Native UI: capture-exclusion flags on both panels, two remote controls, move/resize, font size, alignment and saved preferences passed.\n", stderr)
         NSApp.terminate(nil)
     }
     @objc func previous() { send("previous") }
