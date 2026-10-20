@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-10-20
+
 - Organize Demio as a product under personal/products/demio, with separate
   demio-cli and demio-overlay components in one build/release workspace. Keep
   the public demio command stable and update editor project registrations.
