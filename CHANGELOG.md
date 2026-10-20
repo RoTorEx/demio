@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Open selected scenarios in VS Code (e) or Finder (f), with visible launch
+  errors and no adapter execution. Document scenario structure and manual edits.
+
 - Add GTD-style color roles, a clear date/name column gap, and ` | ` name
   separators. Group details by scope and owner, with separate creation date/time
   fields and spacing around project-owned paths.

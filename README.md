@@ -48,7 +48,8 @@ groups; date and time use separate fields. List columns have a clear gap and
 keep the year, and names use ` | ` as their display separator. Theme colors
 follow GTD roles for borders, labels, dates, names, and selection. Long list cells are
 clipped; the full ID and name remain in details. Use ↑/↓ or j/k to select,
-PgUp/PgDn to scroll details, Enter to run, and q/Esc to quit. The list stays on
+PgUp/PgDn to scroll details, Enter to run, e to open the scenario folder and
+manifest in VS Code, f to reveal it in Finder, and q/Esc to quit. The list stays on
 the left and details on the right at every terminal width. Empty registries
 show registration guidance; unavailable demos show the error and cannot launch.
 Outside a terminal, `demio` still prints the plain list. Registration stores a
@@ -63,6 +64,9 @@ Metadata snapshots keep unavailable channels identifiable.
 
 Use `register FILE --replace` to explicitly replace an ID registered elsewhere.
 `unregister ID` removes only the registry entry.
+
+See [Editing scenarios](docs/scenarios.md) for file structure, editable fields,
+step/adapter responsibilities, and checks after manual edits.
 
 ## Controls and speaker notes
 

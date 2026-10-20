@@ -44,6 +44,10 @@ error and cannot launch. An empty registry still opens the TUI with registration
 guidance. The panels always sit side by side, list left and details right,
 including narrow terminals. Existing stable IDs are preserved. Newest-first ordering and
 exact run IDs remain unchanged. Non-terminal output stays scriptable.
+The selector opens the selected manifest and containing folder in VS Code with
+e, or reveals the file in Finder with f. These inspection actions never invoke
+adapters. Invalid manifests remain openable; Finder can open a surviving parent
+folder if the manifest is missing. Opening failures stay visible in the selector.
 
 Ordering the channel list never changes identity. Manifests remain owned by their projects. Registry replacement
 requires an explicit flag when it changes the source file. Removing registration
@@ -119,6 +123,7 @@ endpoint, and generic AI-driven application control remain outside this first mi
 - `src/run.rs`: navigation, journaling, terminal and native integration.
 - `src/protocol.rs`: persistent adapter, timeouts, process lifecycle.
 - `native/Overlay.swift`: controls, movable/resizable speaker notes.
+- `docs/scenarios.md`: scenario structure and manual editing workflow.
 - `docs/contracts/adapter.md`: project-agent integration and protocol.
 - `examples/browser`: local browser walkthrough.
 - `scripts`, `.github/workflows`: packaging, installation, releases.

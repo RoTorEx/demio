@@ -17,7 +17,7 @@ import time
 
 base = Path.home()/'construction_side/demio/checks'
 base.mkdir(parents=True, exist_ok=True)
-with tempfile.TemporaryDirectory(dir=base) as temporary:
+with tempfile.TemporaryDirectory(prefix="scenario with spaces ", dir=base) as temporary:
     root = Path(temporary)
     binary = root/'demio'
     shutil.copy2(sys.argv[1], binary)
@@ -34,6 +34,14 @@ for line in sys.stdin:
  if r["op"]=="cleanup": break
 ''')
     env = dict(os.environ, TERM='xterm-256color', DEMIO_CONFIG=str(root/'config.toml'), DEMIO_RUNTIME_DIR=str(root/'runtime'), XDG_STATE_HOME=str(root/'state'))
+    # Capture launch arguments without opening desktop apps during automated checks.
+    launchers = root/'fake apps with spaces'
+    launchers.mkdir()
+    for name in ['code', 'open']:
+        script = launchers/name
+        script.write_text('#!'+sys.executable+'\nimport json,os,sys\nwith open(os.environ["DEMIO_LAUNCH_LOG"],"a") as log: log.write(json.dumps([sys.argv[0],*sys.argv[1:]])+"\\n")\nif os.environ.get("DEMIO_LAUNCH_FAIL"): sys.stderr.write("Launcher unavailable"); sys.exit(1)\n')
+        script.chmod(0o755)
+    env.update(PATH=str(launchers)+os.pathsep+os.environ['PATH'], DEMIO_LAUNCH_LOG=str(root/'launches.jsonl'))
     def start():
         master, slave = pty.openpty()
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 30, 140, 0, 0))
@@ -81,6 +89,14 @@ for line in sys.stdin:
     process, master = start()
     try:
         wait_text(master, 'Details')
+        os.write(master, b'e')
+        wait_text(master, 'Opened scenario folder')
+        os.write(master, b'f')
+        wait_text(master, 'in Finder')
+        launches = [json.loads(line) for line in (root/'launches.jsonl').read_text().splitlines()]
+        assert launches[0][1:] == ['--new-window', str(root), str(root/'second.json')], launches
+        assert launches[1][1:] == ['-R', str(root/'second.json')], launches
+        assert not (root/'actions.log').exists(), 'Opening sources must not execute adapters'
         # Resize while open, scroll details, then select the older demo by list position.
         fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack('HHHH', 24, 80, 0, 0))
         process.send_signal(signal.SIGWINCH)
@@ -95,6 +111,17 @@ for line in sys.stdin:
         assert 'cleanup:' in actions and not list((root/'runtime').iterdir())
     finally:
         finish(process, master)
+    env['DEMIO_LAUNCH_FAIL'] = '1'
+    process, master = start()
+    try:
+        wait_text(master, 'Details')
+        os.write(master, b'e')
+        wait_text(master, 'Cannot open:')
+        os.write(master, b'q')
+        assert wait_exit(process, master) == 0
+    finally:
+        finish(process, master)
+    del env['DEMIO_LAUNCH_FAIL']
     before = (root/'actions.log').read_text()
     (root/'second.json').write_text('{broken')
     process, master = start()
@@ -107,4 +134,4 @@ for line in sys.stdin:
         assert (root/'actions.log').read_text() == before
     finally:
         finish(process, master)
-print('Selector: empty state, resize, navigation, detail scrolling, exact selected launch, unavailable launch guard, cancel and cleanup passed.')
+print('Selector: source opening, exact launcher arguments, launch failure, empty state, resize, navigation, detail scrolling, selected launch, unavailable guard and cleanup passed.')

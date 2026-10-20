@@ -1,5 +1,5 @@
 use crate::registry::{Config, Listing};
-use anyhow::Result;
+use anyhow::{Context, Result, bail};
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
     execute,
@@ -15,6 +15,7 @@ use ratatui::{
 };
 use std::{
     io,
+    process::Command,
     sync::atomic::{AtomicBool, Ordering},
     time::Duration,
 };
@@ -207,6 +208,52 @@ fn styled_details<'a>(detail: &'a str, colors: &Palette) -> Text<'a> {
     )
 }
 
+fn open_source(entry: &Listing, editor: bool) -> Result<&'static str> {
+    let folder = entry
+        .manifest
+        .parent()
+        .context("Manifest has no parent folder")?;
+    if !folder.is_dir() {
+        bail!("Scenario folder does not exist: {}", folder.display());
+    }
+    let output = if editor {
+        if !entry.manifest.is_file() {
+            bail!("Manifest does not exist: {}", entry.manifest.display());
+        }
+        match Command::new("code")
+            .arg("--new-window")
+            .arg(folder)
+            .arg(&entry.manifest)
+            .output()
+        {
+            Ok(output) => output,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Command::new("/usr/bin/open")
+                .args(["-a", "Visual Studio Code"])
+                .arg(folder)
+                .arg(&entry.manifest)
+                .output()
+                .context("Could not open Visual Studio Code")?,
+            Err(error) => return Err(error).context("Could not open Visual Studio Code"),
+        }
+    } else {
+        let mut command = Command::new("open");
+        if entry.manifest.is_file() {
+            command.arg("-R").arg(&entry.manifest);
+        } else {
+            command.arg(folder);
+        }
+        command.output().context("Could not open Finder")?
+    };
+    if !output.status.success() {
+        bail!("{}", String::from_utf8_lossy(&output.stderr).trim());
+    }
+    Ok(if editor {
+        "Opened scenario folder and manifest in VS Code"
+    } else {
+        "Opened scenario in Finder"
+    })
+}
+
 fn panes(area: Rect) -> [Rect; 2] {
     let regions =
         Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(area);
@@ -300,7 +347,7 @@ fn draw(
     }
     frame.render_widget(
         Paragraph::new(format!(
-            "↑/↓ or j/k Select · Enter Run · PgUp/PgDn Details · q/Esc Quit\n{message}"
+            "↑/↓ or j/k Select · Enter Run · PgUp/PgDn Details · q/Esc Quit\ne VS Code · f Finder   {message}"
         ))
         .style(Style::default().fg(Color::Gray)),
         regions[1],
@@ -364,6 +411,12 @@ pub fn choose(config: &Config, cancelled: &AtomicBool) -> Result<Option<String>>
                         .min(max_scroll(&detail, panes(area)[1]));
                 }
                 KeyCode::PageUp => scroll = scroll.saturating_sub(5),
+                KeyCode::Char(key @ ('e' | 'f')) if !entries.is_empty() => {
+                    message = match open_source(&entries[selected], key == 'e') {
+                        Ok(message) => message.into(),
+                        Err(error) => format!("Cannot open: {error:#}"),
+                    };
+                }
                 KeyCode::Enter if !entries.is_empty() => {
                     match config.resolve(&entries[selected].id) {
                         Ok(_) => return Ok(Some(entries[selected].id.clone())),
