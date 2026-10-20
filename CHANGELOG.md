@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-10-20
+
 - Use ~/.x-product-demio for the installed product: top-level configuration,
   user demo folders, logs and one current CLI/overlay bundle. Verified upgrades
   replace binaries and preserve data, including migration of same-root legacy
