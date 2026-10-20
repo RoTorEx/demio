@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Move presenter font size and alignment into the shared config.toml [overlay]
+  section. Preserve existing preferences through automatic legacy JSON migration,
+  remove the migrated file, and retain other configuration during native edits.
+
 ## [0.1.6] - 2026-10-20
 
 - Use ~/.x-product-demio for the installed product: top-level configuration,

@@ -1,4 +1,5 @@
 mod demo;
+mod overlay;
 mod protocol;
 mod registry;
 mod run;
@@ -37,6 +38,9 @@ fn application() -> Result<()> {
     if matches!(command, "version" | "--version" | "-V") {
         println!("demio {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
+    }
+    if command == "--overlay-settings" {
+        return overlay::command(&args[1..]);
     }
     let cancelled = Arc::new(AtomicBool::new(false));
     let signal = cancelled.clone();

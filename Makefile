@@ -50,6 +50,7 @@ fmt:
 	cargo fmt --all
 test:
 	cargo test --locked
+	python3 tests/settings.py "$(CARGO_TARGET_DIR)/release/demio"
 	python3 tests/cli.py "$(CARGO_TARGET_DIR)/release/demio"
 	python3 tests/selector.py "$(CARGO_TARGET_DIR)/release/demio"
 	python3 tests/demos.py "$(CARGO_TARGET_DIR)/release/demio"

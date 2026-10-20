@@ -18,7 +18,8 @@ installed product home defaults to ~/.x-product-demio (DEMIO_HOME overrides it).
 Its bin directory contains exactly one current CLI/overlay bundle; verified
 updates replace it and preserve data. Old same-root version bundles are removed
 only after successful replacement. Stop active runs before updating.
-Global config.toml and speaker-notes.json live at the top level. Each demo lives
+One top-level config.toml owns global settings, registry and [overlay] presenter
+preferences. There is no separate speaker preferences file. Each demo lives
 under demos/<name> with its own demo.json, scenarios, shared components and local
 instructions. External registered demo paths remain supported without copying.
 The installer imports missing legacy settings without overwriting new settings
@@ -121,8 +122,16 @@ resizable panel. Controls and narration stay together when moving or resizing.
 A−/A+ changes notes font size in two-point increments, from 14 to 48 points,
 with a 22-point default. This reading range keeps small text legible and large
 text usable with wrapping. Left, center, and right alignment apply to the full
-cue, including newly loaded steps. Font size and alignment persist beside the
-CLI config in `speaker-notes.json`; malformed settings fall back to defaults and
+cue, including newly loaded steps. Font size and alignment persist in the shared
+config.toml [overlay] table (font_size and alignment). The CLI owns TOML parsing,
+atomic writes and legacy JSON migration; the native window calls its sibling CLI
+through an internal settings interface, without interpreting TOML itself. Reads
+and writes honor DEMIO_CONFIG and DEMIO_HOME. Preference writes preserve other
+config values and comments. Normal theme/registry saves preserve the overlay table.
+Valid legacy speaker-notes.json is imported once when [overlay] is absent, then
+removed after saving; an existing [overlay] takes precedence. Malformed legacy
+JSON is retained with a warning rather than discarded. Broken TOML blocks writes
+and preserves source files. Missing/invalid individual preferences use defaults;
 out-of-range sizes clamp to the range. Native smoke checks exercise controls,
 all alignments, resizing, and preference reload. Changing the range affects
 readability and control bounds.

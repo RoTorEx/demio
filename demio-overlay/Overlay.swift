@@ -25,25 +25,32 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var smaller: NSButton!
     var larger: NSButton!
     var alignmentPicker: NSSegmentedControl!
-    var settingsURL: URL {
-        if let config = ProcessInfo.processInfo.environment["DEMIO_CONFIG"] {
-            return URL(fileURLWithPath: config).deletingLastPathComponent().appendingPathComponent("speaker-notes.json")
+    func settings(_ arguments: [String] = []) throws -> [String: Any] {
+        let cli = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath().deletingLastPathComponent().appendingPathComponent("demio")
+        let process = Process()
+        process.executableURL = cli
+        process.arguments = ["--overlay-settings"] + arguments
+        let output = Pipe()
+        process.standardOutput = output
+        try process.run()
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            throw NSError(domain: "DemioConfig", code: Int(process.terminationStatus))
         }
-        let base = ProcessInfo.processInfo.environment["DEMIO_HOME"] ?? NSHomeDirectory()+"/.x-product-demio"
-        return URL(fileURLWithPath: base).appendingPathComponent("speaker-notes.json")
+        return (try JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
     }
     func restoreSettings() {
-        guard let data = try? Data(contentsOf: settingsURL), let state = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return }
-        if let size = state["font_size"] as? Double, size.isFinite { fontSize = min(48, max(14, size)) }
-        switch state["alignment"] as? String { case "center": textAlignment = .center; case "right": textAlignment = .right; default: textAlignment = .left }
+        do {
+            let state = try settings()
+            if let size = state["font_size"] as? Double, size.isFinite { fontSize = min(48, max(14, size)) }
+            switch state["alignment"] as? String { case "center": textAlignment = .center; case "right": textAlignment = .right; default: textAlignment = .left }
+        } catch { fputs("Could not load presenter settings from config.toml\n", stderr) }
     }
     func saveSettings() {
         let alignment = textAlignment == .center ? "center" : textAlignment == .right ? "right" : "left"
-        do {
-            try FileManager.default.createDirectory(at: settingsURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            let data = try JSONSerialization.data(withJSONObject: ["font_size": Double(fontSize), "alignment": alignment])
-            try data.write(to: settingsURL, options: .atomic)
-        } catch { fputs("Could not save speaker notes settings: \(error.localizedDescription)\n", stderr) }
+        do { _ = try settings([String(Double(fontSize)), alignment]) }
+        catch { fputs("Could not save presenter settings in config.toml\n", stderr) }
     }
     func applyTextStyle() {
         let paragraph = NSMutableParagraphStyle()

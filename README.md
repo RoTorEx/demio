@@ -47,7 +47,6 @@ demos before updating. Custom installations use `--install-dir PATH` and set
 ```text
 ~/.x-product-demio/
   config.toml           # Global theme and scenario registry
-  speaker-notes.json    # Presenter window preferences
   bin/                  # Current demio + demio-overlay bundle only
   demos/
     identity-graph/
@@ -128,7 +127,19 @@ One movable, resizable gray glass presenter window contains **Back**, **Next**,
 the current step, role, status, and the text you read aloud. Navigation stays in
 the same window as the notes. Long text scrolls and wraps as the window resizes.
 Use **A− / A+** to change font size and **Left / Center / Right** for alignment.
-These preferences persist in `speaker-notes.json` beside the CLI config.
+These preferences persist in the shared config.toml under `[overlay]`:
+
+```toml
+[overlay]
+font_size = 22.0
+alignment = "left" # left, center, right
+```
+
+The native window uses the CLI's config reader/writer, so theme, registry and
+other fields survive preference changes. Existing speaker-notes.json settings
+migrate automatically on install or the next CLI/window launch. A pre-existing
+[overlay] section wins; the old JSON is removed only after a successful migration.
+Malformed legacy JSON is preserved with a warning for manual recovery.
 
 F9 advances; F7 previews the previous completed step. Depending on your keyboard
 settings, use Fn+F9 / Fn+F7. In the terminal, Enter advances and q / Ctrl+C exits.
@@ -179,8 +190,8 @@ keeps the neutral glass appearance.
 Config: `$DEMIO_CONFIG`, otherwise `$DEMIO_HOME/config.toml`, defaulting to
 `~/.x-product-demio/config.toml`. The registry and theme live at the top level;
 each demo's configuration remains in its own demo.json. DEMIO_HOME overrides the
-product home for isolated/custom installations. Explicit DEMIO_CONFIG also puts
-speaker preferences beside that file. XDG config/state defaults are no longer used.
+product home for isolated/custom installations. Explicit DEMIO_CONFIG selects the same file
+for the CLI and native presenter preferences. XDG config/state defaults are no longer used.
 
 `logs/demio.jsonl` records timestamps, process/scenario IDs, completed step count,
 view and status. It excludes narration, parameters and adapter payloads. At 1 MiB

@@ -57,7 +57,7 @@ PY
 # Data directories are outside bin and are never replaced by an update.
 installed_version=$(cat "$stage/bundle/VERSION")
 python3 - "$stage/bundle" "$install_root" <<'PYINSTALL'
-import os, pathlib, shutil, sys, tempfile
+import os, pathlib, shutil, subprocess, sys, tempfile
 source, root = map(pathlib.Path, sys.argv[1:])
 root.mkdir(parents=True, exist_ok=True)
 with tempfile.TemporaryDirectory(prefix='.install-', dir=root) as temporary:
@@ -92,6 +92,10 @@ if root == pathlib.Path.home()/'.x-product-demio':
             shutil.copy2(legacy/name, root/name)
 if not (root/'config.toml').exists():
     (root/'config.toml').write_text('theme = "calm"\n\n[channels]\n')
+# The CLI owns TOML parsing and the one-time speaker preferences migration.
+subprocess.run([str(root/'bin/demio'), '--overlay-settings'],
+               env=dict(os.environ, DEMIO_CONFIG=str(root/'config.toml')),
+               stdout=subprocess.DEVNULL, check=True)
 PYINSTALL
 if [ "$path_update" = 1 ]; then
   python3 - "$install_root/bin" "$HOME/.zshrc" <<'PY'

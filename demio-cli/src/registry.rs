@@ -158,12 +158,14 @@ pub struct Entry {
 #[serde(default)]
 pub struct Config {
     pub theme: String,
+    pub overlay: toml::Table,
     pub channels: BTreeMap<String, Entry>,
 }
 impl Default for Config {
     fn default() -> Self {
         Self {
             theme: "calm".into(),
+            overlay: toml::Table::new(),
             channels: BTreeMap::new(),
         }
     }
@@ -240,6 +242,7 @@ impl Listing {
 }
 impl Config {
     pub fn load() -> Result<Self> {
+        crate::overlay::migrate()?;
         let path = config_path()?;
         let result: Self = if path.exists() {
             toml::from_str(&fs::read_to_string(path)?).context("Invalid Demio config")?

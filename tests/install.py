@@ -48,12 +48,16 @@ with tempfile.TemporaryDirectory(dir=base) as temporary:
     default_command=['sh',str(installer),'--archive',str(archive)]
     subprocess.run(default_command,check=True,env=default_env)
     managed=home/'.x-product-demio'
-    assert (managed/'config.toml').read_text()=='theme = "forest"\n'
-    assert (managed/'speaker-notes.json').read_text()=='{"font_size":28}'
+    assert 'theme = "forest"' in (managed/'config.toml').read_text()
+    assert not (managed/'speaker-notes.json').exists()
+    import json
+    assert json.loads(subprocess.check_output([str(managed/'bin/demio'),'--overlay-settings'],text=True,env=default_env))=={'font_size':28.0,'alignment':'left'}
     assert 'forest' in subprocess.check_output([str(managed/'bin/demio'),'config'],text=True,env=default_env)
-    (managed/'config.toml').write_text('theme = "sunset"\n')
+    (managed/'config.toml').write_text('theme = "sunset"\n[overlay]\nfont_size = 26.0\nalignment = "right"\n')
     subprocess.run(default_command,check=True,env=default_env)
-    assert (managed/'config.toml').read_text()=='theme = "sunset"\n'
+    assert 'theme = "sunset"' in (managed/'config.toml').read_text()
+    assert json.loads(subprocess.check_output([str(managed/'bin/demio'),'--overlay-settings'],text=True,env=default_env))=={'font_size':26.0,'alignment':'right'}
+    assert not (managed/'speaker-notes.json').exists()
     assert (home/'.zshrc').read_text().count(str(managed/'bin'))==1
     assert '.x-cli-demio' not in (home/'.zshrc').read_text()
     # Exercise update destination inference without fetching a release.
