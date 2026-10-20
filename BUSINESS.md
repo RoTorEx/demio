@@ -29,8 +29,15 @@ Metadata tests cover date order, edits, missing manifests, and summer/winter tim
 
 The interactive selector follows GTD's two-pane TUI: a scrollable list contains
 Warsaw creation date and name, clipped to fit; IDs appear only in details. The
-detail pane starts with the full name and description, then ID and full metadata,
-manifest path, workspace, session limit, and step titles/roles. Selection updates
+detail pane groups information by scope and owner: scenario/Presenter (name and
+description), identity/Registry (ID, project, separate creation date and time),
+environment/Project adapter (manifest and workspace), execution/Demio (session
+limit), and steps/Project adapter (step titles and roles). Blank lines separate
+groups and path fields. Theme roles distinguish list/detail borders, headings,
+labels, dates, names, errors, and selection, following GTD palettes. The list
+retains the creation year and leaves three columns between date and name.
+Displayed TUI names use ` | ` between name segments, without rewriting source
+names or stored IDs. Selection updates
 details without invoking adapters. Long cells are clipped, with full text in the
 details pane. PageUp/PageDown scroll details; unavailable demos display their
 error and cannot launch. An empty registry still opens the TUI with registration

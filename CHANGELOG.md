@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Add GTD-style color roles, a clear date/name column gap, and ` | ` name
+  separators. Group details by scope and owner, with separate creation date/time
+  fields and spacing around project-owned paths.
+
 - Combine navigation buttons and speaker notes in one movable, resizable native
   presenter window, preserving font, alignment, hotkeys, and capture exclusion.
 - Replace the selector with a GTD-style two-pane TUI: scrollable date/name

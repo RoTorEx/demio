@@ -42,7 +42,11 @@ the selector uses the same order.
 Run `demio` without arguments for the two-pane TUI, following GTD: the list
 shows Warsaw creation date and as much of the name as fits; details show the full
 name, description, and ID, followed by creation time, manifest, workspace,
-session limit, and steps. Long list cells are
+session limit, and steps. Details are grouped by scope and owner: Presenter,
+Registry, Project adapter, and Demio. Colored headings and labels separate these
+groups; date and time use separate fields. List columns have a clear gap and
+keep the year, and names use ` | ` as their display separator. Theme colors
+follow GTD roles for borders, labels, dates, names, and selection. Long list cells are
 clipped; the full ID and name remain in details. Use ↑/↓ or j/k to select,
 PgUp/PgDn to scroll details, Enter to run, and q/Esc to quit. The list stays on
 the left and details on the right at every terminal width. Empty registries

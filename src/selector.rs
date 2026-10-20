@@ -10,6 +10,7 @@ use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
+    text::{Line, Span, Text},
     widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState, Wrap},
 };
 use std::{
@@ -26,21 +27,94 @@ impl Drop for Restore {
     }
 }
 
-fn accent(theme: &str) -> Color {
-    match theme {
-        "classic" => Color::White,
-        "forest" => Color::Green,
-        "sunset" => Color::LightRed,
-        "ocean" => Color::Cyan,
-        "midnight" => Color::LightMagenta,
-        _ => Color::LightBlue,
+struct Palette {
+    list: Color,
+    detail: Color,
+    label: Color,
+    project: Color,
+    selected: Color,
+    selected_text: Color,
+}
+
+fn palette(theme: &str) -> Palette {
+    let (list, detail, label, project, selected, selected_text) = match theme {
+        "classic" => (
+            Color::Blue,
+            Color::Magenta,
+            Color::Blue,
+            Color::Cyan,
+            Color::Blue,
+            Color::White,
+        ),
+        "forest" => (
+            Color::Green,
+            Color::LightGreen,
+            Color::LightGreen,
+            Color::Yellow,
+            Color::Green,
+            Color::Black,
+        ),
+        "sunset" => (
+            Color::LightRed,
+            Color::LightMagenta,
+            Color::Yellow,
+            Color::LightRed,
+            Color::LightMagenta,
+            Color::Black,
+        ),
+        "ocean" => (
+            Color::Cyan,
+            Color::Blue,
+            Color::LightCyan,
+            Color::LightBlue,
+            Color::Cyan,
+            Color::Black,
+        ),
+        "midnight" => (
+            Color::DarkGray,
+            Color::LightBlue,
+            Color::LightMagenta,
+            Color::LightBlue,
+            Color::DarkGray,
+            Color::White,
+        ),
+        _ => (
+            Color::LightBlue,
+            Color::LightMagenta,
+            Color::LightCyan,
+            Color::LightYellow,
+            Color::Blue,
+            Color::White,
+        ),
+    };
+    Palette {
+        list,
+        detail,
+        label,
+        project,
+        selected,
+        selected_text,
     }
 }
 
+fn display_name(entry: &Listing) -> String {
+    entry.display_name.replace(" · ", " | ")
+}
+
 fn details(config: &Config, entry: &Listing) -> String {
+    let (date, time) = entry
+        .created_at
+        .map(|date| {
+            let date = date.with_timezone(&chrono_tz::Europe::Warsaw);
+            (
+                date.format("%Y-%m-%d").to_string(),
+                date.format("%H:%M:%S %Z (UTC%:z) Warsaw").to_string(),
+            )
+        })
+        .unwrap_or_else(|| ("Unknown".into(), "Unknown".into()));
     let mut text = format!(
-        "{}\n\nDescription\n{}\n\nID: {}\nProject: {}\nCreated: {} Warsaw\n\nManifest: {}\n",
-        entry.display_name,
+        "{}\n\nScenario | Presenter\n\nDescription\n{}\n\nIdentity | Registry\n\nID: {}\nProject: {}\nCreated date: {}\nCreated time: {}\n\nEnvironment | Project adapter\n\nManifest\n{}\n",
+        display_name(entry),
         if entry.description.trim().is_empty() {
             "No description provided"
         } else {
@@ -48,26 +122,89 @@ fn details(config: &Config, entry: &Listing) -> String {
         },
         entry.id,
         entry.project,
-        entry.created_label(),
+        date,
+        time,
         entry.manifest.display()
     );
     match config.resolve(&entry.id) {
         Ok((channel, path)) => {
             text.push_str(&format!(
-                "Workspace: {}\nSession limit: {} seconds\n\nSteps ({})\n",
-                channel.workspace_path(&path).unwrap_or_default().display(),
-                channel.session_seconds,
-                channel.steps.len()
+                "\nWorkspace\n{}\n\nExecution | Demio\n\nSession limit: {} seconds\n\nSteps | Project adapter\n\n",
+                channel.workspace_path(&path).unwrap_or_default().display(), channel.session_seconds
             ));
             for (index, step) in channel.steps.iter().enumerate() {
-                text.push_str(&format!("{}. {} · {}\n", index + 1, step.title, step.role));
+                text.push_str(&format!("{}. {} | {}\n", index + 1, step.title, step.role));
             }
         }
-        Err(error) => text.push_str(&format!(
-            "\nUnavailable: {error:#}\nRepair the manifest before running this demo."
-        )),
+        Err(error) => {
+            text = format!("Unavailable: cannot launch this scenario\n\n{text}");
+            text.push_str(&format!(
+                "\nUnavailable: {error:#}\nRepair the manifest before running this demo."
+            ));
+        }
     }
     text
+}
+
+fn styled_details<'a>(detail: &'a str, colors: &Palette) -> Text<'a> {
+    Text::from(
+        detail
+            .lines()
+            .enumerate()
+            .map(|(index, line)| {
+                if line.starts_with("Unavailable:") {
+                    return Line::styled(line, Style::default().fg(Color::LightRed));
+                }
+                if matches!(
+                    line,
+                    "Scenario | Presenter"
+                        | "Identity | Registry"
+                        | "Environment | Project adapter"
+                        | "Execution | Demio"
+                        | "Steps | Project adapter"
+                ) {
+                    return Line::styled(
+                        line,
+                        Style::default()
+                            .fg(colors.detail)
+                            .add_modifier(Modifier::BOLD),
+                    );
+                }
+                if matches!(line, "Description" | "Manifest" | "Workspace") {
+                    return Line::styled(
+                        line,
+                        Style::default()
+                            .fg(colors.label)
+                            .add_modifier(Modifier::BOLD),
+                    );
+                }
+                for label in [
+                    "ID: ",
+                    "Project: ",
+                    "Created date: ",
+                    "Created time: ",
+                    "Session limit: ",
+                ] {
+                    if let Some(value) = line.strip_prefix(label) {
+                        return Line::from(vec![
+                            Span::styled(label, Style::default().fg(colors.label)),
+                            Span::raw(value),
+                        ]);
+                    }
+                }
+                Line::styled(
+                    line,
+                    if index == 0 {
+                        Style::default()
+                            .fg(colors.project)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(Color::White)
+                    },
+                )
+            })
+            .collect::<Vec<_>>(),
+    )
 }
 
 fn panes(area: Rect) -> [Rect; 2] {
@@ -98,7 +235,7 @@ fn draw(
     let regions = Layout::vertical([Constraint::Min(0), Constraint::Length(2)]).split(area);
     let panes = panes(regions[0]);
     let scroll = scroll.min(max_scroll(detail, panes[1]));
-    let color = accent(theme);
+    let colors = palette(theme);
     let rows = entries.iter().map(|entry| {
         Row::new(vec![
             Cell::from(
@@ -110,29 +247,33 @@ fn draw(
                             .to_string()
                     })
                     .unwrap_or_else(|| "Unknown".into()),
-            ),
+            )
+            .style(Style::default().fg(Color::Gray)),
             Cell::from(format!(
                 "{}{}",
                 if entry.available { "" } else { "! " },
-                entry.display_name
+                display_name(entry)
             )),
         ])
     });
     let table = Table::new(rows, [Constraint::Length(10), Constraint::Min(0)])
+        .column_spacing(3)
+        .style(Style::default().fg(colors.project))
         .header(
             Row::new(["Date", "Name"])
-                .style(Style::default().fg(color))
+                .style(Style::default().fg(colors.label))
                 .bottom_margin(1),
         )
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(format!(" Demio · Demonstrations ({}) ", entries.len())),
+                .title(format!(" Demio | Demonstrations ({}) ", entries.len()))
+                .border_style(Style::default().fg(colors.list)),
         )
         .row_highlight_style(
             Style::default()
-                .bg(color)
-                .fg(Color::Black)
+                .bg(colors.selected)
+                .fg(colors.selected_text)
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol("› ");
@@ -145,14 +286,14 @@ fn draw(
         );
     } else {
         frame.render_widget(
-            Paragraph::new(detail)
+            Paragraph::new(styled_details(detail, &colors))
                 .wrap(Wrap { trim: false })
                 .scroll((scroll, 0))
                 .block(
                     Block::default()
                         .borders(Borders::ALL)
                         .title(" Details ")
-                        .border_style(Style::default().fg(color)),
+                        .border_style(Style::default().fg(colors.detail)),
                 ),
             panes[1],
         );
@@ -160,7 +301,8 @@ fn draw(
     frame.render_widget(
         Paragraph::new(format!(
             "↑/↓ or j/k Select · Enter Run · PgUp/PgDn Details · q/Esc Quit\n{message}"
-        )),
+        ))
+        .style(Style::default().fg(Color::Gray)),
         regions[1],
     );
 }
@@ -252,8 +394,10 @@ mod tests {
                 name: format!("Example {n:02}"),
                 display_name: format!("Example {n:02}"),
                 project: "Project".into(),
-                description: "Description".into(),
-                created_at: None,
+                description: "A visible demo outcome.".into(),
+                created_at: Some(
+                    chrono::DateTime::parse_from_rfc3339("2026-10-20T12:00:00+02:00").unwrap(),
+                ),
                 manifest: "missing.json".into(),
                 available: false,
             })
@@ -284,8 +428,20 @@ mod tests {
                 "Selected row must scroll into view"
             );
             assert!(!list.contains("demo-59"), "IDs must not use list space");
+            assert!(
+                list.contains("2026-10-20   ! Example 59"),
+                "Date and name must have a visible column gap"
+            );
+            assert_ne!(
+                buffer[(areas[0].x, areas[0].y)].fg,
+                buffer[(areas[1].x, areas[1].y)].fg,
+                "List and detail borders have distinct theme roles"
+            );
             assert!(detail.contains("demo-59"), "Full ID remains in details");
-            assert!(detail.contains("Description"));
+            assert!(
+                detail.contains("A visible demo outcome."),
+                "The selected description must be readable above technical fields"
+            );
             assert!(detail.contains("Details"));
             assert_eq!(areas[0].y, areas[1].y);
             assert!(areas[0].right() <= areas[1].x);
