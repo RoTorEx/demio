@@ -4,9 +4,11 @@
 
 - Combine navigation buttons and speaker notes in one movable, resizable native
   presenter window, preserving font, alignment, hotkeys, and capture exclusion.
-- Replace the selector with a GTD-style two-pane TUI: scrollable ID/date/name
+- Replace the selector with a GTD-style two-pane TUI: scrollable date/name
   list and full scenario details, including workspace and steps. Support empty
-  registries, unavailable demos, detail scrolling, and narrow terminals.
+  registries, unavailable demos, detail scrolling, and narrow terminals. Keep
+  panes side by side at all widths, move IDs to details, and show the description
+  before technical metadata.
 
 ## [0.1.4] - 2026-10-19
 

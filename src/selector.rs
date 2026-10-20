@@ -39,16 +39,16 @@ fn accent(theme: &str) -> Color {
 
 fn details(config: &Config, entry: &Listing) -> String {
     let mut text = format!(
-        "{}\n\nID: {}\nProject: {}\nCreated: {} Warsaw\n\n{}\n\nManifest: {}\n",
+        "{}\n\nDescription\n{}\n\nID: {}\nProject: {}\nCreated: {} Warsaw\n\nManifest: {}\n",
         entry.display_name,
-        entry.id,
-        entry.project,
-        entry.created_label(),
         if entry.description.trim().is_empty() {
             "No description provided"
         } else {
             &entry.description
         },
+        entry.id,
+        entry.project,
+        entry.created_label(),
         entry.manifest.display()
     );
     match config.resolve(&entry.id) {
@@ -71,12 +71,8 @@ fn details(config: &Config, entry: &Listing) -> String {
 }
 
 fn panes(area: Rect) -> [Rect; 2] {
-    let layout = if area.width < 100 {
-        Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)])
-    } else {
-        Layout::horizontal([Constraint::Percentage(55), Constraint::Percentage(45)])
-    };
-    let regions = layout.split(area);
+    let regions =
+        Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(area);
     [regions[0], regions[1]]
 }
 
@@ -105,7 +101,6 @@ fn draw(
     let color = accent(theme);
     let rows = entries.iter().map(|entry| {
         Row::new(vec![
-            Cell::from(entry.id.clone()),
             Cell::from(
                 entry
                     .created_at
@@ -123,31 +118,24 @@ fn draw(
             )),
         ])
     });
-    let table = Table::new(
-        rows,
-        [
-            Constraint::Percentage(38),
-            Constraint::Length(10),
-            Constraint::Min(8),
-        ],
-    )
-    .header(
-        Row::new(["ID", "Created", "Name"])
-            .style(Style::default().fg(color))
-            .bottom_margin(1),
-    )
-    .block(
-        Block::default()
-            .borders(Borders::ALL)
-            .title(format!(" Demio · Demonstrations ({}) ", entries.len())),
-    )
-    .row_highlight_style(
-        Style::default()
-            .bg(color)
-            .fg(Color::Black)
-            .add_modifier(Modifier::BOLD),
-    )
-    .highlight_symbol("› ");
+    let table = Table::new(rows, [Constraint::Length(10), Constraint::Min(0)])
+        .header(
+            Row::new(["Date", "Name"])
+                .style(Style::default().fg(color))
+                .bottom_margin(1),
+        )
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(format!(" Demio · Demonstrations ({}) ", entries.len())),
+        )
+        .row_highlight_style(
+            Style::default()
+                .bg(color)
+                .fg(Color::Black)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol("› ");
     frame.render_stateful_widget(table, panes[0], state);
     if entries.is_empty() {
         frame.render_widget(
@@ -261,8 +249,8 @@ mod tests {
         let entries: Vec<_> = (0..60)
             .map(|n| Listing {
                 id: format!("demo-{n:02}"),
-                name: "Example".into(),
-                display_name: "Project · Example".into(),
+                name: format!("Example {n:02}"),
+                display_name: format!("Example {n:02}"),
                 project: "Project".into(),
                 description: "Description".into(),
                 created_at: None,
@@ -270,25 +258,37 @@ mod tests {
                 available: false,
             })
             .collect();
-        for (width, height) in [(140, 24), (80, 24), (40, 12)] {
+        for (width, height) in [(140, 30), (80, 30), (60, 30)] {
             let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
             let mut state = TableState::default().with_selected(Some(59));
             let detail = details(&Config::default(), &entries[59]);
             terminal
                 .draw(|frame| draw(frame, &entries, &mut state, &detail, 0, "ocean", ""))
                 .unwrap();
-            let content: String = terminal
-                .backend()
-                .buffer()
-                .content
-                .iter()
-                .map(|c| c.symbol())
-                .collect();
+            let buffer = terminal.backend().buffer();
+            let areas = panes(Rect::new(0, 0, width, height - 2));
+            let pane_text = |area: Rect| -> String {
+                (area.y..area.bottom())
+                    .map(|y| {
+                        (area.x..area.right())
+                            .map(|x| buffer[(x, y)].symbol())
+                            .collect::<String>()
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            };
+            let list = pane_text(areas[0]);
+            let detail = pane_text(areas[1]);
             assert!(
-                content.contains("demo-59"),
+                list.contains("Example 59"),
                 "Selected row must scroll into view"
             );
-            assert!(content.contains("Details"));
+            assert!(!list.contains("demo-59"), "IDs must not use list space");
+            assert!(detail.contains("demo-59"), "Full ID remains in details");
+            assert!(detail.contains("Description"));
+            assert!(detail.contains("Details"));
+            assert_eq!(areas[0].y, areas[1].y);
+            assert!(areas[0].right() <= areas[1].x);
             terminal
                 .draw(|frame| draw(frame, &[], &mut TableState::default(), "", 0, "calm", ""))
                 .unwrap();

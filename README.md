@@ -40,11 +40,12 @@ the selector uses the same order.
 `run` takes an exact ID, independent of list order. JSON output adds `project`,
 `description`, `created_at`, and `display_name` while retaining the original `name`.
 Run `demio` without arguments for the two-pane TUI, following GTD: the list
-shows ID, Warsaw creation date, and name; details show the full name, description,
-creation time, manifest, workspace, session limit, and steps. Long list cells are
+shows Warsaw creation date and as much of the name as fits; details show the full
+name, description, and ID, followed by creation time, manifest, workspace,
+session limit, and steps. Long list cells are
 clipped; the full ID and name remain in details. Use ↑/↓ or j/k to select,
-PgUp/PgDn to scroll details, Enter to run, and q/Esc to quit. Below 100 terminal
-columns, the panes stack vertically to keep details readable. Empty registries
+PgUp/PgDn to scroll details, Enter to run, and q/Esc to quit. The list stays on
+the left and details on the right at every terminal width. Empty registries
 show registration guidance; unavailable demos show the error and cannot launch.
 Outside a terminal, `demio` still prints the plain list. Registration stores a
 reference to the manifest, so project-owned workflow changes are read on launch.

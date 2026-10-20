@@ -28,13 +28,14 @@ checked-out files. Unavailable manifests use the last registered metadata snapsh
 Metadata tests cover date order, edits, missing manifests, and summer/winter time.
 
 The interactive selector follows GTD's two-pane TUI: a scrollable list contains
-stable ID, Warsaw creation date, and name; the detail pane shows full metadata,
+Warsaw creation date and name, clipped to fit; IDs appear only in details. The
+detail pane starts with the full name and description, then ID and full metadata,
 manifest path, workspace, session limit, and step titles/roles. Selection updates
 details without invoking adapters. Long cells are clipped, with full text in the
 details pane. PageUp/PageDown scroll details; unavailable demos display their
 error and cannot launch. An empty registry still opens the TUI with registration
-guidance. Below 100 terminal columns the panes stack to retain reading space;
-this is a presentation threshold, not a domain limit. Newest-first ordering and
+guidance. The panels always sit side by side, list left and details right,
+including narrow terminals. Existing stable IDs are preserved. Newest-first ordering and
 exact run IDs remain unchanged. Non-terminal output stays scriptable.
 
 Ordering the channel list never changes identity. Manifests remain owned by their projects. Registry replacement
