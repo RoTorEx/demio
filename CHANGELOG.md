@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-10-20
+
 - Move presenter font size and alignment into the shared config.toml [overlay]
   section. Preserve existing preferences through automatic legacy JSON migration,
   remove the migrated file, and retain other configuration during native edits.
