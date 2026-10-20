@@ -29,7 +29,7 @@ folder remains openable in Finder. These actions never execute the adapter.
 
 ## Creating a demo with an agent
 
-`demio init ./my-demo` creates the whole structure, including two local browser
+`demio init ~/.x-product-demio/demos/my-demo` creates the whole structure, including two local browser
 variants, one shared adapter, AGENTS.md and README.md. Give the agent this demo
 folder. AGENTS.md requires it to explain terminology and controls, discuss the
 audience, intended result, variants, environment, data, allowed writes/budgets,
@@ -147,3 +147,12 @@ Changes to the same manifest are loaded on the next run; registration need not
 be repeated. Quit and reopen the selector to refresh its metadata and details.
 Use `demio register FILE` for a new scenario or after moving the manifest; use
 `--replace` explicitly if an existing ID moves to a different path.
+
+## Storage ownership
+
+Keep personal demos under ~/.x-product-demio/demos/<demo-name>. Global settings
+are in ~/.x-product-demio/config.toml; demo settings stay in demo.json inside the
+demo folder. Product upgrades replace bin only. Keep application checkout paths
+in demo parameters rather than deriving them from this folder's parent count,
+so moving a demo preserves its target. Do not put private demo data in the public
+product repository. External project runtime data remains owned by that project.

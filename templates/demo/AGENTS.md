@@ -74,3 +74,12 @@ presenter reads aloud. F9/Enter advances; F7 previews a completed step. Back is
 viewing, not undo. q/Ctrl+C in the terminal ends the session. Font size and
 alignment persist. Capture exclusion depends on the recorder: inspect a short
 saved recording on the actual Mac before promising that the notes are hidden.
+
+## Storage ownership
+
+Keep personal demos under ~/.x-product-demio/demos/<demo-name>. Global settings
+are in ~/.x-product-demio/config.toml; demo settings stay in demo.json inside the
+demo folder. Product upgrades replace bin only. Keep application checkout paths
+in demo parameters rather than deriving them from this folder's parent count,
+so moving a demo preserves its target. Do not put private demo data in the public
+product repository. External project runtime data remains owned by that project.

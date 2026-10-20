@@ -29,8 +29,8 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if let config = ProcessInfo.processInfo.environment["DEMIO_CONFIG"] {
             return URL(fileURLWithPath: config).deletingLastPathComponent().appendingPathComponent("speaker-notes.json")
         }
-        let base = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"] ?? NSHomeDirectory()+"/.config"
-        return URL(fileURLWithPath: base).appendingPathComponent("demio/speaker-notes.json")
+        let base = ProcessInfo.processInfo.environment["DEMIO_HOME"] ?? NSHomeDirectory()+"/.x-product-demio"
+        return URL(fileURLWithPath: base).appendingPathComponent("speaker-notes.json")
     }
     func restoreSettings() {
         guard let data = try? Data(contentsOf: settingsURL), let state = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return }

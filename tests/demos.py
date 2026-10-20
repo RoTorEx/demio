@@ -11,7 +11,7 @@ base = Path.home()/'construction_side/demio/checks'
 base.mkdir(parents=True, exist_ok=True)
 with tempfile.TemporaryDirectory(prefix='demo ownership ', dir=base) as temporary:
     root = Path(temporary)
-    env = dict(os.environ, DEMIO_CONFIG=str(root/'config.toml'), DEMIO_RUNTIME_DIR=str(root/'runtime'), XDG_STATE_HOME=str(root/'state'))
+    env = dict(os.environ, DEMIO_CONFIG=str(root/'config.toml'), DEMIO_RUNTIME_DIR=str(root/'runtime'), DEMIO_HOME=str(root/'product'))
     def cli(*args, ok=True):
         result = subprocess.run([binary,*map(str,args)], env=env, capture_output=True, text=True, timeout=15)
         assert (result.returncode==0)==ok, (args,result.stdout,result.stderr)

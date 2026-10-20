@@ -162,14 +162,21 @@ fn application() -> Result<()> {
             } else {
                 parent
             };
-            let status = Command::new("sh")
+            let legacy = prefix == registry::home()?.join(".x-cli-demio");
+            let destination = if legacy {
+                registry::product_home()?
+            } else {
+                prefix.to_path_buf()
+            };
+            let mut installer = Command::new("sh");
+            installer
                 .arg(script.clone())
-                .args([
-                    "--install-dir",
-                    &prefix.to_string_lossy(),
-                    "--no-path-update",
-                ])
-                .status()?;
+                .arg("--install-dir")
+                .arg(destination);
+            if !legacy {
+                installer.arg("--no-path-update");
+            }
+            let status = installer.status()?;
             if !status.success() {
                 bail!("Update failed; previous executable was preserved until verification");
             }

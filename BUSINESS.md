@@ -11,6 +11,30 @@ packaged together, and installed side by side. The Rust package is demio-cli;
 the stable public executable remains demio. Component README files explain
 these boundaries.
 
+## Installed home and storage
+
+The source repository owns product code, templates and public examples. The
+installed product home defaults to ~/.x-product-demio (DEMIO_HOME overrides it).
+Its bin directory contains exactly one current CLI/overlay bundle; verified
+updates replace it and preserve data. Old same-root version bundles are removed
+only after successful replacement. Stop active runs before updating.
+Global config.toml and speaker-notes.json live at the top level. Each demo lives
+under demos/<name> with its own demo.json, scenarios, shared components and local
+instructions. External registered demo paths remain supported without copying.
+The installer imports missing legacy settings without overwriting new settings
+or moving project source. Registrations are references and metadata snapshots,
+not another demo configuration. Moving a demo requires explicit re-registration.
+
+Session transport and owned browser files are temporary and deleted on exit;
+there is no persistent resume state, sessions directory or routine backup store.
+logs/demio.jsonl retains only timestamps, process/scenario identity, position and
+status, excluding adapter payloads, parameters and narration. Rotation at 1 MiB
+keeps one prior file to bound disk usage during repeated rehearsals. Installer
+checks cover repeat replacement, migration from version symlinks, rejection of
+corrupt archives and preservation of config/demo/log files. CLI checks exercise
+isolated home paths and diagnostic records. Project adapters own their separate
+application runtime state; this storage policy does not delete that source data.
+
 ## Purpose and actors
 
 A presenter needs to narrate a repeatable demo while automation performs visible
@@ -21,7 +45,7 @@ as the controls.
 
 ## Concepts and invariants
 
-A demo is one project-owned folder containing demo.json, AGENTS.md, README.md,
+A demo is one user-owned folder containing demo.json, AGENTS.md, README.md,
 shared components and one or more scenarios. Demo metadata owns its name,
 description, project, workspace, adapter defaults, shared parameters and an
 explicit list of scenario paths. A scenario references its demo and owns a stable

@@ -1,6 +1,6 @@
 use crate::{
     protocol::{Event, Worker},
-    registry::{Channel, atomic_write, home},
+    registry::{Channel, atomic_write, now, product_home},
 };
 use anyhow::{Context, Result, bail};
 use crossterm::{
@@ -76,7 +76,7 @@ impl Scratch {
     fn new() -> Result<Self> {
         let base = std::env::var_os("DEMIO_RUNTIME_DIR")
             .map(PathBuf::from)
-            .unwrap_or(home()?.join("construction_side/demio/runtime"));
+            .unwrap_or(std::env::temp_dir().join("demio"));
         fs::create_dir_all(&base)?;
         let name = format!(
             "{}-{}",
@@ -132,14 +132,20 @@ fn overlay(session: &Path, sender: mpsc::Sender<String>) -> Result<Overlay> {
     Ok(Overlay(child))
 }
 fn journal(channel: &Channel, position: &Position, status: &str) -> Result<()> {
-    let base = std::env::var_os("XDG_STATE_HOME")
-        .map(PathBuf::from)
-        .unwrap_or(home()?.join(".local/state"));
-    let data = serde_json::json!({"channel_id":channel.id,"completed":position.completed,"view":position.view,"status":status});
-    atomic_write(
-        &base.join("demio/last-session.json"),
-        &serde_json::to_vec_pretty(&data)?,
-    )
+    let directory = product_home()?.join("logs");
+    fs::create_dir_all(&directory)?;
+    let path = directory.join("demio.jsonl");
+    // Bounded diagnostics only: no narration, parameters or adapter payloads.
+    if fs::metadata(&path).is_ok_and(|metadata| metadata.len() >= 1024 * 1024) {
+        fs::rename(&path, directory.join("demio.previous.jsonl"))?;
+    }
+    let data = serde_json::json!({"at":now(),"process_id":std::process::id(),"scenario_id":channel.id,"completed":position.completed,"view":position.view,"status":status});
+    let mut stream = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    writeln!(stream, "{}", serde_json::to_string(&data)?)?;
+    Ok(())
 }
 fn display(
     channel: &Channel,
@@ -215,7 +221,10 @@ pub fn run(
     let worker = Worker::start(&channel, &manifest, &scratch.0)?;
     println!("Preparing {} [{}]…", channel.name, channel.id);
     worker.send("prepare", None, channel.steps[0].timeout_seconds)?;
-    worker.wait(&cancelled)?;
+    if let Err(error) = worker.wait(&cancelled) {
+        journal(&channel, &Position::default(), "PreparationError")?;
+        return Err(error);
+    }
     let mut position = Position::default();
     if auto {
         let deadline = Instant::now() + Duration::from_secs(channel.session_seconds);
@@ -240,6 +249,11 @@ pub fn run(
             Ok(())
         })();
         worker.cleanup();
+        journal(
+            &channel,
+            &position,
+            if result.is_ok() { "Finished" } else { "Error" },
+        )?;
         return result;
     }
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
@@ -371,6 +385,15 @@ pub fn run(
     drop(screen);
     drop(panel);
     worker.cleanup();
+    journal(
+        &channel,
+        &position,
+        if failure.is_some() {
+            "Error"
+        } else {
+            "Stopped"
+        },
+    )?;
     if let Some(error) = failure {
         bail!("{error}");
     }

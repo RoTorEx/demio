@@ -37,11 +37,34 @@ rm /tmp/demio-install.sh
 demio --version
 ```
 
-Installation uses `~/.x-cli-demio/bin`, adds it to `.zshrc` once, and preserves
-configuration. Open a new terminal after installation. `demio update` installs
-the latest release after checking the archive checksum and both native versions.
-Old version directories remain available for rollback; remove unused directories
-under `~/.x-cli-demio/versions` when no session uses them.
+Installation uses `~/.x-product-demio/bin` and adds it to `.zshrc` once. Open a
+new terminal after installation. `demio update` verifies the archive checksum
+and both native versions, then replaces the current bundle. There is one
+installed version; updates preserve configuration, demos and logs. Stop active
+demos before updating. Custom installations use `--install-dir PATH` and set
+`DEMIO_HOME=PATH` when launching.
+
+```text
+~/.x-product-demio/
+  config.toml           # Global theme and scenario registry
+  speaker-notes.json    # Presenter window preferences
+  bin/                  # Current demio + demio-overlay bundle only
+  demos/
+    identity-graph/
+      demo.json         # This demo's configuration stays with its components
+      AGENTS.md
+      README.md
+      shared/
+      scenarios/
+  logs/                 # Bounded diagnostics, no session resume data
+```
+
+The source repository contains product code, public examples and templates.
+Personal/customer demos belong in the product home's demos directory. Registering
+an existing external demo remains supported. The installer imports old settings
+from `~/.config/demio` once when no new settings exist, preserving the originals.
+It also replaces the old Demio PATH entry. Move existing demos explicitly, then
+register their demo.json with --replace; the installer never moves project files.
 
 ## Demos and scenarios
 
@@ -63,9 +86,9 @@ identity-graph/
 ```
 
 ```sh
-demio init ./my-demo
-demio validate ./my-demo/demo.json
-demio register ./my-demo/demo.json
+demio init ~/.x-product-demio/demos/my-demo
+demio validate ~/.x-product-demio/demos/my-demo/demo.json
+demio register ~/.x-product-demio/demos/my-demo/demo.json
 demio list
 demio
 ```
@@ -132,8 +155,8 @@ entry, requester/approver roles, submission, and approval. It makes no AI calls
 and changes no external services.
 
 ```sh
-demio init ./my-demo
-cd my-demo
+demio init ~/.x-product-demio/demos/my-demo
+cd ~/.x-product-demio/demos/my-demo
 python3 -m venv .venv
 .venv/bin/python -m pip install playwright==1.63.0
 PLAYWRIGHT_SKIP_BROWSER_GC=1 .venv/bin/python -m playwright install chromium
@@ -153,11 +176,19 @@ Like the neighboring personal CLIs, Demio provides `help`, `version`, `update`,
 forest, sunset, ocean, midnight. Themes affect the terminal; the native window
 keeps the neutral glass appearance.
 
-Config: `$DEMIO_CONFIG`, or `$XDG_CONFIG_HOME/demio/config.toml`, defaulting to
-`~/.config/demio/config.toml`. The registry and theme live there. A minimal last
-session journal lives in `$XDG_STATE_HOME/demio/last-session.json` (default
-`~/.local/state`); it does not resume a stopped session. Runtime files and browser
-profiles are removed when the owned session ends.
+Config: `$DEMIO_CONFIG`, otherwise `$DEMIO_HOME/config.toml`, defaulting to
+`~/.x-product-demio/config.toml`. The registry and theme live at the top level;
+each demo's configuration remains in its own demo.json. DEMIO_HOME overrides the
+product home for isolated/custom installations. Explicit DEMIO_CONFIG also puts
+speaker preferences beside that file. XDG config/state defaults are no longer used.
+
+`logs/demio.jsonl` records timestamps, process/scenario IDs, completed step count,
+view and status. It excludes narration, parameters and adapter payloads. At 1 MiB
+it rotates to one previous log. These are diagnostics, never resumable state.
+Session files/browser profiles use the OS temporary directory and are removed on
+normal exit; DEMIO_RUNTIME_DIR can override the temporary base. No permanent
+state, sessions or backup directories are created. A crash may leave temporary
+files; project adapters still own external effects and project runtime data.
 
 ## Development
 

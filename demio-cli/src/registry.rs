@@ -173,14 +173,16 @@ pub fn home() -> Result<PathBuf> {
         .context("HOME is unavailable")?
         .into())
 }
+pub fn product_home() -> Result<PathBuf> {
+    Ok(std::env::var_os("DEMIO_HOME")
+        .map(PathBuf::from)
+        .unwrap_or(home()?.join(".x-product-demio")))
+}
 pub fn config_path() -> Result<PathBuf> {
     if let Some(path) = std::env::var_os("DEMIO_CONFIG") {
         return Ok(path.into());
     }
-    let base = std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .unwrap_or(home()?.join(".config"));
-    Ok(base.join("demio/config.toml"))
+    Ok(product_home()?.join("config.toml"))
 }
 pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
     let parent = path

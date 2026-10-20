@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 # All writes are staged until archive entries and both native versions pass.
-install_root=${DEMIO_INSTALL_DIR:-"$HOME/.x-cli-demio"}
+install_root=${DEMIO_INSTALL_DIR:-${DEMIO_HOME:-"$HOME/.x-product-demio"}}
 archive=
 version=
 path_update=1
@@ -53,26 +53,54 @@ for program in ('demio', 'demio-overlay'):
     if subprocess.check_output([str(binary),'--version'], text=True).strip() != f'{program} {version}':
         raise SystemExit('Native version mismatch')
 PY
-# Version directories plus a single pointer swap keep CLI and helper together.
-mkdir -p "$install_root/versions"
+# Keep one current bundle. A failed swap restores the previous bin directory.
+# Data directories are outside bin and are never replaced by an update.
 installed_version=$(cat "$stage/bundle/VERSION")
-release_dir=$(mktemp -d "$install_root/versions/$installed_version.XXXXXXXX")
-cp "$stage/bundle/"* "$release_dir/"
-ln -s "$release_dir" "$install_root/.bin-next-$$"
-if [ -e "$install_root/bin" ] && [ ! -L "$install_root/bin" ]; then
-  rm "$install_root/.bin-next-$$"
-  echo 'Existing bin is not a symlink; choose another --install-dir.' >&2
-  exit 1
-fi
-python3 - "$install_root/.bin-next-$$" "$install_root/bin" <<'PY'
-import os,sys
-os.replace(sys.argv[1],sys.argv[2])
-PY
+python3 - "$stage/bundle" "$install_root" <<'PYINSTALL'
+import os, pathlib, shutil, sys, tempfile
+source, root = map(pathlib.Path, sys.argv[1:])
+root.mkdir(parents=True, exist_ok=True)
+with tempfile.TemporaryDirectory(prefix='.install-', dir=root) as temporary:
+    temporary = pathlib.Path(temporary)
+    candidate, previous = temporary/'bin', temporary/'previous'
+    shutil.copytree(source, candidate)
+    current = root/'bin'
+    had_current = current.exists() or current.is_symlink()
+    if had_current:
+        os.replace(current, previous)
+    try:
+        os.replace(candidate, current)
+    except BaseException:
+        if had_current:
+            os.replace(previous, current)
+        raise
+# Old Demio installers stored only application bundles here. Remove that
+# legacy layout after the new bundle is in place, never user data directories.
+versions = root/'versions'
+if versions.is_dir() and not versions.is_symlink():
+    bundles = list(versions.iterdir())
+    allowed = {'demio', 'demio-overlay', 'demio-install.sh', 'VERSION', 'LICENSE'}
+    if all(p.is_dir() and not p.is_symlink() and {c.name for c in p.iterdir()} == allowed for p in bundles):
+        shutil.rmtree(versions)
+(root/'demos').mkdir(exist_ok=True)
+(root/'logs').mkdir(exist_ok=True)
+# Import legacy preferences once, preserving the originals and custom configs.
+if root == pathlib.Path.home()/'.x-product-demio':
+    legacy = pathlib.Path(os.environ.get('XDG_CONFIG_HOME', pathlib.Path.home()/'.config'))/'demio'
+    for name in ('config.toml', 'speaker-notes.json'):
+        if not (root/name).exists() and (legacy/name).is_file():
+            shutil.copy2(legacy/name, root/name)
+if not (root/'config.toml').exists():
+    (root/'config.toml').write_text('theme = "calm"\n\n[channels]\n')
+PYINSTALL
 if [ "$path_update" = 1 ]; then
   python3 - "$install_root/bin" "$HOME/.zshrc" <<'PY'
 import pathlib, shlex,sys
 profile=pathlib.Path(sys.argv[2]); line='export PATH='+shlex.quote(sys.argv[1])+':"$PATH"'
 text=profile.read_text() if profile.exists() else ''
+legacy='export PATH='+shlex.quote(str(pathlib.Path.home()/'.x-cli-demio/bin'))+':"$PATH"'
+text=text.replace(legacy,line)
+profile.write_text(text)
 if line not in text.splitlines():
     with profile.open('a') as stream: stream.write('\n# Demio CLI\n'+line+'\n')
 PY

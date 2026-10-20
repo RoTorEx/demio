@@ -33,7 +33,7 @@ for line in sys.stdin:
  print(json.dumps({"id":r["id"],"event":"done","ok":True}),flush=True)
  if r["op"]=="cleanup": break
 ''')
-    env = dict(os.environ, TERM='xterm-256color', DEMIO_CONFIG=str(root/'config.toml'), DEMIO_RUNTIME_DIR=str(root/'runtime'), XDG_STATE_HOME=str(root/'state'))
+    env = dict(os.environ, TERM='xterm-256color', DEMIO_CONFIG=str(root/'config.toml'), DEMIO_RUNTIME_DIR=str(root/'runtime'), DEMIO_HOME=str(root/'product'))
     # Capture launch arguments without opening desktop apps during automated checks.
     launchers = root/'fake apps with spaces'
     launchers.mkdir()

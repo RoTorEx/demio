@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- Use ~/.x-product-demio for the installed product: top-level configuration,
+  user demo folders, logs and one current CLI/overlay bundle. Verified upgrades
+  replace binaries and preserve data, including migration of same-root legacy
+  version installations and import of missing old preferences.
+- Replace persistent last-session state with bounded diagnostic logs and use
+  OS temporary storage for session files; document storage ownership and migration.
+
 ## [0.1.5] - 2026-10-20
 
 - Organize Demio as a product under personal/products/demio, with separate

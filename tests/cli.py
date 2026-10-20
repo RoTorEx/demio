@@ -14,7 +14,7 @@ base = Path.home()/'construction_side/demio/checks'
 base.mkdir(parents=True, exist_ok=True)
 with tempfile.TemporaryDirectory(dir=base) as temporary:
     root = Path(temporary)
-    env = dict(os.environ, DEMIO_CONFIG=str(root/'config.toml'), DEMIO_RUNTIME_DIR=str(root/'runtime'), XDG_STATE_HOME=str(root/'state'))
+    env = dict(os.environ, DEMIO_CONFIG=str(root/'config.toml'), DEMIO_RUNTIME_DIR=str(root/'runtime'), DEMIO_HOME=str(root/'product'))
     def cli(*args, ok=True):
         result = subprocess.run([binary,*args], env=env, text=True, capture_output=True, timeout=15)
         assert (result.returncode == 0) == ok, (args,result.stdout,result.stderr)
@@ -82,7 +82,9 @@ for line in sys.stdin:
     cli('run','z-demo','--auto')
     log=(root/'actions.log').read_text()
     assert log.count('run:one') == 1 and log.count('run:two') == 1
-    assert json.loads((root/'state/demio/last-session.json').read_text())['completed'] == 2
+    events=[json.loads(line) for line in (root/'product/logs/demio.jsonl').read_text().splitlines()]
+    assert events[-1]['completed'] == 2 and events[-1]['scenario_id']=='z-demo'
+    assert 'Read this' not in (root/'product/logs/demio.jsonl').read_text()
     # Exercise the actual interactive entrypoint, including backward navigation.
     (root/'actions.log').write_text('')
     master, slave = pty.openpty()
@@ -116,6 +118,16 @@ for line in sys.stdin:
         result=cli('run',failure,'--auto',ok=False)
         assert 'run:never' not in (root/'actions.log').read_text()
         assert not list((root/'runtime').iterdir()), 'Owned session scratch leaked'
+    # Diagnostics rotate without carrying narration; OS temporary files clean up.
+    logfile=root/'product/logs/demio.jsonl'
+    logfile.write_text('{"old":true}\n'*90000)
+    temporary=root/'os-temp';temporary.mkdir()
+    default_runtime=dict(env,TMPDIR=str(temporary));default_runtime.pop('DEMIO_RUNTIME_DIR',None)
+    subprocess.run([binary,'run','z-demo','--auto'],check=True,env=default_runtime,capture_output=True,timeout=15)
+    assert (root/'product/logs/demio.previous.jsonl').is_file()
+    assert json.loads(logfile.read_text().splitlines()[-1])['status']=='Finished'
+    assert not list((temporary/'demio').iterdir())
+    assert not (root/'product/state').exists() and not (root/'product/sessions').exists()
     changed=json.loads(alternate.read_text());changed['id']='changed';alternate.write_text(json.dumps(changed))
     cli('run','z-demo','--auto',ok=False)
     assert not next(c for c in json.loads(cli('list','--json').stdout) if c['id']=='z-demo')['available']
