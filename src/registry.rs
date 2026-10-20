@@ -32,6 +32,10 @@ fn default_root() -> String {
 #[serde(deny_unknown_fields)]
 pub struct Channel {
     pub schema_version: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub demo: Option<PathBuf>,
+    #[serde(default)]
+    pub parameters: BTreeMap<String, serde_json::Value>,
     pub id: String,
     pub name: String,
     #[serde(default)]
@@ -49,12 +53,19 @@ pub struct Channel {
 }
 impl Channel {
     pub fn load(path: &Path) -> Result<Self> {
-        let channel: Self = serde_json::from_slice(
-            &fs::read(path).with_context(|| format!("Read {}", path.display()))?,
-        )
-        .context("Invalid channel JSON")?;
+        let source = path
+            .canonicalize()
+            .with_context(|| format!("Read {}", path.display()))?;
+        let channel: Self = serde_json::from_value(crate::demo::scenario_document(&source)?)
+            .context("Invalid scenario JSON")?;
         channel.validate()?;
         Ok(channel)
+    }
+    pub fn demo_info(&self) -> Result<Option<crate::demo::DemoInfo>> {
+        self.demo
+            .as_ref()
+            .map(|path| crate::demo::Demo::load(path)?.info(path))
+            .transpose()
     }
     pub fn validate(&self) -> Result<()> {
         if self.schema_version != 1 {
@@ -104,7 +115,8 @@ impl Channel {
         prefixed_name(&self.project_name(manifest), &self.name)
     }
     pub fn workspace_path(&self, manifest: &Path) -> Result<PathBuf> {
-        let root = manifest
+        let source = manifest.canonicalize().context("Manifest does not exist")?;
+        let root = source
             .parent()
             .context("Manifest has no parent directory")?
             .join(&self.workspace);
@@ -131,6 +143,8 @@ pub fn validate_id(id: &str) -> Result<()> {
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Entry {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub demo: Option<crate::demo::DemoInfo>,
     pub name: String,
     pub manifest: PathBuf,
     #[serde(default)]
@@ -201,6 +215,7 @@ pub fn prefixed_name(project: &str, name: &str) -> String {
 }
 #[derive(Serialize)]
 pub struct Listing {
+    pub demo: Option<crate::demo::DemoInfo>,
     pub id: String,
     pub name: String,
     pub display_name: String,
@@ -242,14 +257,18 @@ impl Config {
             .channels
             .get(id)
             .with_context(|| format!("Unknown channel ID: {id}. Run demio list."))?;
-        let channel = Channel::load(&entry.manifest)?;
+        let path = entry
+            .manifest
+            .canonicalize()
+            .context("Manifest does not exist")?;
+        let channel = Channel::load(&path)?;
         if channel.id != id {
             bail!(
                 "Registered ID no longer matches manifest; register the updated channel explicitly"
             );
         }
-        channel.workspace_path(&entry.manifest)?;
-        Ok((channel, entry.manifest.clone()))
+        channel.workspace_path(&path)?;
+        Ok((channel, path))
     }
     pub fn listing(&self) -> Vec<Listing> {
         let mut rows: Vec<_> = self
@@ -282,7 +301,13 @@ impl Config {
                         .ok()
                         .map(|time| DateTime::<Utc>::from(time).fixed_offset())
                 });
+                let demo = resolved
+                    .as_ref()
+                    .ok()
+                    .and_then(|(channel, _)| channel.demo_info().ok().flatten())
+                    .or_else(|| entry.demo.clone());
                 Listing {
+                    demo,
                     id: id.clone(),
                     display_name: prefixed_name(&project, &name),
                     name,
@@ -302,43 +327,74 @@ impl Config {
         rows
     }
     pub fn register(&mut self, path: &Path, replace: bool) -> Result<String> {
-        let manifest = path.canonicalize().context("Manifest does not exist")?;
-        let mut channel = Channel::load(&manifest)?;
-        channel.workspace_path(&manifest)?;
-        if let Some(old) = self.channels.get(&channel.id) {
-            if old.manifest != manifest && !replace {
-                bail!(
-                    "ID {} is registered elsewhere; use --replace to change it",
-                    channel.id
-                );
+        Ok(self
+            .register_files(&[path.canonicalize()?], replace)?
+            .remove(0))
+    }
+    pub fn register_demo(&mut self, path: &Path, replace: bool) -> Result<Vec<String>> {
+        let path = path.canonicalize()?;
+        let demo = crate::demo::Demo::load(&path)?;
+        let paths = demo.scenario_paths(&path)?;
+        for scenario in &paths {
+            if Channel::load(scenario)?.demo.as_ref() != Some(&path) {
+                bail!("Every scenario must reference its owning demo manifest");
             }
         }
-        if channel.created_at.is_none() {
-            // Preserve the original scenario date when the same manifest is edited.
-            channel.created_at = self
-                .channels
-                .get(&channel.id)
-                .filter(|old| old.manifest == manifest)
-                .and_then(|old| old.created_at)
-                .or_else(|| Some(now()));
-            let mut document: serde_json::Value = serde_json::from_slice(&fs::read(&manifest)?)?;
-            document["created_at"] = serde_json::to_value(channel.created_at)?;
-            let mut bytes = serde_json::to_vec_pretty(&document)?;
-            bytes.push(b'\n');
-            atomic_write(&manifest, &bytes)?;
-        }
-        self.channels.insert(
-            channel.id.clone(),
-            Entry {
-                project: channel.project_name(&manifest),
+        self.register_files(&paths, replace)
+    }
+    fn register_files(&mut self, paths: &[PathBuf], replace: bool) -> Result<Vec<String>> {
+        let mut prepared = Vec::new();
+        let mut ids = std::collections::HashSet::new();
+        // Validate the complete batch before changing the registry or timestamps.
+        for manifest in paths {
+            let mut channel = Channel::load(manifest)?;
+            channel.workspace_path(manifest)?;
+            if !ids.insert(channel.id.clone()) {
+                bail!("Duplicate scenario ID: {}", channel.id);
+            }
+            if let Some(old) = self.channels.get(&channel.id) {
+                if old.manifest != *manifest && !replace {
+                    bail!(
+                        "ID {} is registered elsewhere; use --replace to change it",
+                        channel.id
+                    );
+                }
+            }
+            let mut write = None;
+            if channel.created_at.is_none() {
+                channel.created_at = self
+                    .channels
+                    .get(&channel.id)
+                    .filter(|old| old.manifest == *manifest)
+                    .and_then(|old| old.created_at)
+                    .or_else(|| Some(now()));
+                let mut document: serde_json::Value = serde_json::from_slice(&fs::read(manifest)?)?;
+                document["created_at"] = serde_json::to_value(channel.created_at)?;
+                let mut bytes = serde_json::to_vec_pretty(&document)?;
+                bytes.push(b'\n');
+                write = Some(bytes);
+            }
+            let entry = Entry {
+                demo: channel.demo_info()?,
+                project: channel.project_name(manifest),
                 description: channel.description,
                 created_at: channel.created_at,
                 name: channel.name,
-                manifest,
-            },
-        );
+                manifest: manifest.clone(),
+            };
+            prepared.push((channel.id, entry, write));
+        }
+        for (_, entry, write) in &prepared {
+            if let Some(bytes) = write {
+                atomic_write(&entry.manifest, bytes)?;
+            }
+        }
+        let ids = prepared.iter().map(|(id, _, _)| id.clone()).collect();
+        for (id, entry, _) in prepared {
+            self.channels.insert(id, entry);
+        }
         self.save()?;
-        Ok(channel.id)
+        Ok(ids)
     }
 }
 
@@ -348,6 +404,7 @@ mod metadata_tests {
     #[test]
     fn warsaw_creation_labels_follow_the_event_date() {
         let mut row = Listing {
+            demo: None,
             id: "demo".into(),
             name: "Example".into(),
             display_name: "Project · Example".into(),

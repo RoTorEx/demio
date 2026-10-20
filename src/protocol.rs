@@ -98,6 +98,11 @@ impl Worker {
             .current_dir(&workspace)
             .env("DEMIO_SESSION_DIR", session)
             .env("DEMIO_WORKSPACE", &workspace)
+            .env("DEMIO_SCENARIO", manifest)
+            .env(
+                "DEMIO_PARAMETERS",
+                serde_json::to_string(&channel.parameters)?,
+            )
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())

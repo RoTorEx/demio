@@ -122,8 +122,10 @@ for line in sys.stdin:
     broken=root/'invalid.json';broken.write_text('{bad json');cli('validate',str(broken),ok=False)
     duplicate=manifest('duplicate',['same','same']);cli('validate',str(duplicate),ok=False)
     cli('unregister','z-demo');assert alternate.exists()
-    cli('init',str(root/'example'));cli('validate',str(root/'example/channel.json'))
-    example=json.loads((root/'example/channel.json').read_text());assert example['created_at'] and example['project']=='Demio' and example['description']
+    cli('init',str(root/'example'));cli('validate',str(root/'example/demo.json'))
+    example=json.loads((root/'example/scenarios/request/scenario.json').read_text());assert example['created_at'] and example['demo']=='../../demo.json' and example['description']
+    assert (root/'example/AGENTS.md').is_file() and (root/'example/README.md').is_file()
+    cli('register',str(root/'example/demo.json'))
     cli('init',str(root/'example'),ok=False)
     cli('theme','ocean');assert 'ocean *' in cli('themes').stdout
     cli('theme','unknown',ok=False)

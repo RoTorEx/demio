@@ -24,49 +24,61 @@ the latest release after checking the archive checksum and both native versions.
 Old version directories remain available for rollback; remove unused directories
 under `~/.x-cli-demio/versions` when no session uses them.
 
-## Channels
+## Demos and scenarios
 
-```sh
-demio register /path/to/project/demo/channel.json
-demio list
-demio list --json
-demio doctor browser-demo
-demio run browser-demo
+A **demo** is one folder with a shared environment, adapters and assets. A
+**scenario** is one route through that demo: its own steps, narration and input
+parameters. Several scenarios reuse the same components.
+
+```text
+identity-graph/
+  AGENTS.md
+  README.md
+  demo.json
+  shared/
+    adapter.py
+  scenarios/
+    investigation/scenario.json
+    role-change/scenario.json
+    onboarding/scenario.json
 ```
 
-`list` shows stable IDs, project-prefixed names, descriptions, and creation times
-in Europe/Warsaw with the date's CET/CEST offset. Newest scenarios appear first;
-the selector uses the same order.
-`run` takes an exact ID, independent of list order. JSON output adds `project`,
-`description`, `created_at`, and `display_name` while retaining the original `name`.
-Run `demio` without arguments for the two-pane TUI, following GTD: the list
-shows Warsaw creation date and as much of the name as fits; details show the full
-name, description, and ID, followed by creation time, manifest, workspace,
-session limit, and steps. Details are grouped by scope and owner: Presenter,
-Registry, Project adapter, and Demio. Colored headings and labels separate these
-groups; date and time use separate fields. List columns have a clear gap and
-keep the year, and names use ` | ` as their display separator. Theme colors
-follow GTD roles for borders, labels, dates, names, and selection. Long list cells are
-clipped; the full ID and name remain in details. Use ↑/↓ or j/k to select,
-PgUp/PgDn to scroll details, Enter to run, e to open the scenario folder and
-manifest in VS Code, f to reveal it in Finder, and q/Esc to quit. The list stays on
-the left and details on the right at every terminal width. Empty registries
-show registration guidance; unavailable demos show the error and cannot launch.
-Outside a terminal, `demio` still prints the plain list. Registration stores a
-reference to the manifest, so project-owned workflow changes are read on launch.
-`demio init` records `created_at` automatically in the manifest. For manually
-authored manifests, `register` adds it if missing and preserves it on subsequent
-registrations. Registration therefore writes a missing timestamp to the project
-manifest. Existing legacy manifests remain readable: the project defaults to the
-workspace directory name, description may be empty, and unrecorded dates use
-filesystem creation time where available (otherwise displayed as unknown).
-Metadata snapshots keep unavailable channels identifiable.
+```sh
+demio init ./my-demo
+demio validate ./my-demo/demo.json
+demio register ./my-demo/demo.json
+demio list
+demio
+```
 
-Use `register FILE --replace` to explicitly replace an ID registered elsewhere.
-`unregister ID` removes only the registry entry.
+Init scaffolds two working browser scenarios, shared components, a brief and
+local agent instructions. Read those instructions and agree the real demo brief
+before adapting it. Registration accepts demo.json (all declared scenarios) or a
+single scenario JSON. Run and doctor use a stable **scenario ID** printed by list.
+Legacy standalone manifests remain supported.
 
-See [Editing scenarios](docs/scenarios.md) for file structure, editable fields,
-step/adapter responsibilities, and checks after manual edits.
+The two-pane TUI shows demo headers with their scenarios on the left and
+separate demo/scenario details on the right. Dates retain the year; names use
+` | `, with colors following GTD roles. ↑/↓ or j/k selects a scenario; Enter runs
+it; PgUp/PgDn scrolls details; e opens the owning demo root and selected scenario
+in VS Code; f reveals the scenario in Finder; q/Esc quits. Panes stay side by
+side. Non-terminal output remains a plain list; list --json includes demo
+identity and paths. Empty/unavailable states stay visible without running code.
+
+`demo.json` owns shared defaults. Scenario overrides are resolved on launch.
+`parameters` merge by key and reach the adapter as JSON in `DEMIO_PARAMETERS`;
+`DEMIO_SCENARIO` identifies the selected JSON. New scenarios should reuse shared
+actions and vary parameters/narration rather than copy adapters. The scaffold's
+AGENTS.md explains boundaries, controls, user agreement and meaningful checks.
+
+Registration stores source paths rather than copying files. Reopen the selector
+to refresh metadata after editing. Preserve IDs and creation timestamps; new
+scenarios get timestamps on init/registration. Warsaw dates use the event's
+CET/CEST offset. Use --replace explicitly when moving an existing ID to another
+manifest. Unregister removes only the registration.
+
+See [Editing demos and scenarios](docs/scenarios.md) and the
+[adapter contract](docs/contracts/adapter.md) for full examples and path rules.
 
 ## Controls and speaker notes
 
@@ -106,9 +118,9 @@ cd my-demo
 python3 -m venv .venv
 .venv/bin/python -m pip install playwright==1.63.0
 PLAYWRIGHT_SKIP_BROWSER_GC=1 .venv/bin/python -m playwright install chromium
-demio register channel.json
-demio doctor browser-demo
-demio run browser-demo
+demio register demo.json
+demio list
+demio
 ```
 
 An agent can use the [adapter contract](docs/contracts/adapter.md) to prepare a

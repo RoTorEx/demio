@@ -1,31 +1,47 @@
 # Project adapter contract · schema 1
 
 A project agent should prepare its demo environment, own the workflow in the
-project, and register `channel.json`. Follow that project's authorization rules;
+project, and register `demo.json` with its declared scenarios. Follow that project's authorization rules;
 registration does not grant permission for external writes or paid calls.
 
-Start from `demio init DIRECTORY`. Adapt the JSON manifest's ID, name, workspace,
-argument-array adapter command, session_seconds, and steps. Set `project` to the
-project's readable name and `description` to what viewers will see and the
-expected outcome. Keep `name` concise without repeating the project: Demio
-renders `Project · Name`. The agent may derive these fields from the user's
-natural-language request; Demio does not call an AI model to generate them.
-`init` sets `created_at` automatically; preserve it when editing or regenerating
-the scenario. If authoring JSON manually, omit that field and let `register`
-record the timestamp, rather than inventing one. Dates are RFC3339 with an offset,
-preserved in the manifest and rendered in Europe/Warsaw. All listings show newest
-creation times first, with ID ordering as a deterministic tie-breaker. Each step supplies a
-unique ID, title, role, `say` text for the presenter, and optional timeout_seconds
-(default 120). The default workspace is the manifest's directory. Relative
-workspaces and adapter executable paths resolve there. IDs are permanent,
-non-secret identifiers; names may change. `schema_version` must be 1.
+Start from `demio init DIRECTORY`. A demo is the entire created folder; its
+`demo.json` lists scenarios and owns shared defaults. Each
+`scenarios/<variant>/scenario.json` references `../../demo.json` and owns its ID,
+name, description, creation time, ordered steps and parameter overrides.
 
-Use `demio validate FILE` before registration. Install project dependencies, then
-register the manifest and run `demio doctor ID`. Test the real application and
-appropriate failure states before handing the channel to the presenter. An agent
-should supply narration identifying role changes, intentionally paced input,
-smooth scrolling, target highlights, and checks that the intended state became
-visible. The core does not impose browser timing or invent business actions.
+Read the generated AGENTS.md, explain this terminology and the controls to the
+user, propose a brief and agree audience, outcome, variants, target environment
+and allowed effects before implementing product behavior. Retain accepted choices
+in the demo README. Reuse existing authorization and keep independent preparation
+moving while a material choice is unresolved.
+
+Demo format (schema 1): id, name, optional project/description, workspace (default
+`.`), adapter argument array, optional session_seconds, parameters object, and
+scenarios (an explicit nonempty list of relative paths inside this demo folder).
+Scenario schema 1 retains the existing step/run contract and adds optional demo
+and parameters. Legacy standalone scenarios still define their own adapter and
+workspace. Unknown fields are rejected in both manifests.
+
+Scenario fields override inherited demo fields. Inherited workspace resolves
+beside demo.json; an explicit scenario workspace resolves beside that scenario's
+file. Commands execute in the resulting workspace. Parameters merge shallowly:
+scenario keys replace the same demo keys. Demio passes the effective JSON object
+in DEMIO_PARAMETERS and the canonical scenario path in DEMIO_SCENARIO. Adapters
+own interpreting routes, inputs and other parameter values.
+
+Run `demio validate demo.json`, register the demo, doctor each scenario ID, then
+rehearse the actual interactive paths. Batch registration checks all members and
+ID conflicts before changing the registry. Scenario IDs and original creation
+timestamps are stable. Step IDs must match adapter operations. Shared code
+belongs in shared/ or the demo's established common location; do not duplicate
+adapters merely for narration or route differences.
+
+Each step supplies id, title, role, say, and optional timeout_seconds (120 by
+default). Session seconds default to 7200. Narration is spoken by the presenter;
+role labels do not switch application accounts. Neither registration nor doctor
+proves that product actions are safe or successful. Verify visible results and
+appropriate failure boundaries. Never infer credentials, write permission or a
+paid model budget.
 
 ## Persistent process
 

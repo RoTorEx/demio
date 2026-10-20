@@ -8,6 +8,9 @@ import sys
 import threading
 
 browser = context = page = server = playwright = None
+parameters = json.loads(os.environ.get("DEMIO_PARAMETERS", "{}"))
+summary = parameters.get("summary", "New laptop for the design team")
+reason = parameters.get("reason", "Our current laptop needs replacement.")
 
 def focus(selector):
     node = page.locator(selector)
@@ -42,7 +45,7 @@ for line in sys.stdin:
             playwright = sync_playwright().start()
             context = playwright.chromium.launch_persistent_context(str(Path(request['session_dir'])/'browser'), headless=os.environ.get('DEMIO_HEADLESS') == '1', viewport={'width':1280,'height':800})
             page = context.pages[0]
-            page.goto(f'http://127.0.0.1:{server.server_port}')
+            page.goto(f'http://127.0.0.1:{server.server_port}'+parameters.get('start_path', '/'))
         elif op in ('run', 'preview'):
             selectors = {'intro':'#role','fill':'#form','submit':'#status','approve':'#approval','close':'#status'}
             if step not in selectors:
@@ -50,10 +53,10 @@ for line in sys.stdin:
             if op == 'run':
                 if step == 'fill':
                     focus('#form')
-                    page.locator('#summary').press_sequentially('New laptop for the design team', delay=45)
-                    page.locator('#reason').press_sequentially('Our current laptop needs replacement.', delay=35)
-                    assert page.locator('#summary').input_value() == 'New laptop for the design team'
-                    assert page.locator('#reason').input_value() == 'Our current laptop needs replacement.'
+                    page.locator('#summary').press_sequentially(summary, delay=45)
+                    page.locator('#reason').press_sequentially(reason, delay=35)
+                    assert page.locator('#summary').input_value() == summary
+                    assert page.locator('#reason').input_value() == reason
                 elif step == 'submit':
                     focus('#submit')
                     page.locator('#submit').click()

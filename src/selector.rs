@@ -99,7 +99,45 @@ fn palette(theme: &str) -> Palette {
 }
 
 fn display_name(entry: &Listing) -> String {
-    entry.display_name.replace(" · ", " | ")
+    if entry.demo.is_some() {
+        entry.name.replace(" · ", " | ")
+    } else {
+        entry.display_name.replace(" · ", " | ")
+    }
+}
+
+fn group_key(entry: &Listing) -> String {
+    entry
+        .demo
+        .as_ref()
+        .map(|demo| demo.manifest.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "legacy".into())
+}
+
+fn grouped(entries: Vec<Listing>) -> Vec<Listing> {
+    let mut groups: Vec<(String, Vec<Listing>)> = Vec::new();
+    for entry in entries {
+        let key = group_key(&entry);
+        if let Some((_, items)) = groups.iter_mut().find(|(group, _)| group == &key) {
+            items.push(entry);
+        } else {
+            groups.push((key, vec![entry]));
+        }
+    }
+    groups.into_iter().flat_map(|(_, items)| items).collect()
+}
+
+fn selected_row(entries: &[Listing], selected: usize) -> usize {
+    if !entries.iter().any(|entry| entry.demo.is_some()) {
+        return selected;
+    }
+    let mut headers = 0;
+    for index in 0..=selected.min(entries.len().saturating_sub(1)) {
+        if index == 0 || group_key(&entries[index]) != group_key(&entries[index - 1]) {
+            headers += 1;
+        }
+    }
+    selected + headers
 }
 
 fn details(config: &Config, entry: &Listing) -> String {
@@ -114,7 +152,7 @@ fn details(config: &Config, entry: &Listing) -> String {
         })
         .unwrap_or_else(|| ("Unknown".into(), "Unknown".into()));
     let mut text = format!(
-        "{}\n\nScenario | Presenter\n\nDescription\n{}\n\nIdentity | Registry\n\nID: {}\nProject: {}\nCreated date: {}\nCreated time: {}\n\nEnvironment | Project adapter\n\nManifest\n{}\n",
+        "Scenario | Presenter\n\n{}\n\nDescription\n{}\n\nIdentity | Registry\n\nID: {}\nProject: {}\nCreated date: {}\nCreated time: {}\n\nEnvironment | Project adapter\n\nManifest\n{}\n",
         display_name(entry),
         if entry.description.trim().is_empty() {
             "No description provided"
@@ -127,6 +165,19 @@ fn details(config: &Config, entry: &Listing) -> String {
         time,
         entry.manifest.display()
     );
+    if let Some(demo) = &entry.demo {
+        text = format!(
+            "Demo | Shared components\n\n{}\n{}\n\n{}",
+            demo.name, demo.description, text
+        );
+        text = text.replace(
+            "Environment | Project adapter\n\n",
+            &format!(
+                "Environment | Project adapter\n\nDemo folder\n{}\n\n",
+                demo.folder.display()
+            ),
+        );
+    }
     match config.resolve(&entry.id) {
         Ok((channel, path)) => {
             text.push_str(&format!(
@@ -158,7 +209,8 @@ fn styled_details<'a>(detail: &'a str, colors: &Palette) -> Text<'a> {
                 }
                 if matches!(
                     line,
-                    "Scenario | Presenter"
+                    "Demo | Shared components"
+                        | "Scenario | Presenter"
                         | "Identity | Registry"
                         | "Environment | Project adapter"
                         | "Execution | Demio"
@@ -171,7 +223,10 @@ fn styled_details<'a>(detail: &'a str, colors: &Palette) -> Text<'a> {
                             .add_modifier(Modifier::BOLD),
                     );
                 }
-                if matches!(line, "Description" | "Manifest" | "Workspace") {
+                if matches!(
+                    line,
+                    "Description" | "Manifest" | "Workspace" | "Demo folder"
+                ) {
                     return Line::styled(
                         line,
                         Style::default()
@@ -210,8 +265,10 @@ fn styled_details<'a>(detail: &'a str, colors: &Palette) -> Text<'a> {
 
 fn open_source(entry: &Listing, editor: bool) -> Result<&'static str> {
     let folder = entry
-        .manifest
-        .parent()
+        .demo
+        .as_ref()
+        .map(|demo| demo.folder.as_path())
+        .or_else(|| entry.manifest.parent())
         .context("Manifest has no parent folder")?;
     if !folder.is_dir() {
         bail!("Scenario folder does not exist: {}", folder.display());
@@ -283,8 +340,28 @@ fn draw(
     let panes = panes(regions[0]);
     let scroll = scroll.min(max_scroll(detail, panes[1]));
     let colors = palette(theme);
-    let rows = entries.iter().map(|entry| {
-        Row::new(vec![
+    let has_demos = entries.iter().any(|entry| entry.demo.is_some());
+    let mut rows = Vec::new();
+    for (index, entry) in entries.iter().enumerate() {
+        if has_demos && (index == 0 || group_key(entry) != group_key(&entries[index - 1])) {
+            let count = entries
+                .iter()
+                .filter(|other| group_key(other) == group_key(entry))
+                .count();
+            let title = entry
+                .demo
+                .as_ref()
+                .map(|demo| demo.name.as_str())
+                .unwrap_or("Standalone scenarios");
+            rows.push(
+                Row::new([Cell::from(""), Cell::from(format!("▾ {title} ({count})"))]).style(
+                    Style::default()
+                        .fg(colors.detail)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            );
+        }
+        rows.push(Row::new(vec![
             Cell::from(
                 entry
                     .created_at
@@ -301,8 +378,21 @@ fn draw(
                 if entry.available { "" } else { "! " },
                 display_name(entry)
             )),
-        ])
-    });
+        ]));
+    }
+    let demo_count = entries
+        .iter()
+        .filter_map(|entry| entry.demo.as_ref().map(|demo| &demo.manifest))
+        .collect::<std::collections::HashSet<_>>()
+        .len();
+    let title = if has_demos {
+        format!(
+            " Demio | Demos: {demo_count} | Scenarios: {} ",
+            entries.len()
+        )
+    } else {
+        format!(" Demio | Scenarios: {} ", entries.len())
+    };
     let table = Table::new(rows, [Constraint::Length(10), Constraint::Min(0)])
         .column_spacing(3)
         .style(Style::default().fg(colors.project))
@@ -314,7 +404,7 @@ fn draw(
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(format!(" Demio | Demonstrations ({}) ", entries.len()))
+                .title(title)
                 .border_style(Style::default().fg(colors.list)),
         )
         .row_highlight_style(
@@ -355,9 +445,9 @@ fn draw(
 }
 
 pub fn choose(config: &Config, cancelled: &AtomicBool) -> Result<Option<String>> {
-    let entries = config.listing();
+    let entries = grouped(config.listing());
     let mut state = TableState::default();
-    state.select((!entries.is_empty()).then_some(0));
+    state.select((!entries.is_empty()).then(|| selected_row(&entries, 0)));
     let mut selected: usize = 0;
     let mut scroll = 0u16;
     let mut message = String::new();
@@ -426,7 +516,7 @@ pub fn choose(config: &Config, cancelled: &AtomicBool) -> Result<Option<String>>
                 _ => (),
             }
             if previous != selected {
-                state.select(Some(selected));
+                state.select(Some(selected_row(&entries, selected)));
                 detail = details(config, &entries[selected]);
                 scroll = 0;
                 message.clear();
@@ -443,6 +533,7 @@ mod tests {
     fn renders_empty_and_long_lists_at_multiple_sizes() {
         let entries: Vec<_> = (0..60)
             .map(|n| Listing {
+                demo: None,
                 id: format!("demo-{n:02}"),
                 name: format!("Example {n:02}"),
                 display_name: format!("Example {n:02}"),

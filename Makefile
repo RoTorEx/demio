@@ -47,6 +47,7 @@ test:
 	cargo test --locked
 	python3 tests/cli.py "$(CARGO_TARGET_DIR)/release/demio"
 	python3 tests/selector.py "$(CARGO_TARGET_DIR)/release/demio"
+	python3 tests/demos.py "$(CARGO_TARGET_DIR)/release/demio"
 check: lint build test
 	sh -n scripts/install.sh scripts/release-push.sh
 	python3 -c 'import ast,pathlib; [ast.parse(p.read_text()) for p in list(pathlib.Path("scripts").glob("*.py"))+list(pathlib.Path("examples").rglob("*.py"))+list(pathlib.Path("tests").glob("*.py"))]'

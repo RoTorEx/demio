@@ -1,3 +1,7 @@
+---
+version: "2026-10-20.1"
+---
+
 # AGENTS.md
 
 Keep this file a short context router. Put product truth in `BUSINESS.md` and
@@ -38,6 +42,8 @@ This project uses committed local copies of the Vibecoding Kernel.
 
 - Work personally; never spawn or use subagents.
 - Read `docs/contracts/adapter.md` for workflow integration.
+- For demo/scenario authoring, read `docs/scenarios.md` and the generated local
+  `AGENTS.md`; its source is `templates/demo/AGENTS.md`.
 - Read `README.md` and the Makefile for supported commands and delivery.
 - The CLI and sequencing are Rust; native window code is a small macOS helper.
 - Keep public examples independent of customer data, paths, and credentials.

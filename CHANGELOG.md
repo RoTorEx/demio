@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Separate demo containers from scenarios: shared defaults and parameterized
+  adapters, per-scenario paths/narration, grouped TUI, batch registration, and
+  source opening at the owning demo root.
+- Scaffold two scenarios with shared components and local AGENTS.md/README.md
+  instructions for terminology, ownership, controls, agreement and verification.
+
 - Open selected scenarios in VS Code (e) or Finder (f), with visible launch
   errors and no adapter execution. Document scenario structure and manual edits.
 

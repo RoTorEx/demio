@@ -4,32 +4,58 @@
 
 A presenter needs to narrate a repeatable demo while automation performs visible
 application steps. A project agent prepares the environment, manifest, and
-adapter. The presenter registers the channel, selects its ID, speaks, and presses
+adapter. The presenter registers the demo, selects a scenario ID, speaks, and presses
 Next. Viewers see the application; the presenter reads notes in the same window
 as the controls.
 
 ## Concepts and invariants
 
-A channel has a stable ID, readable name, project, description, and creation
-time. Names display with `Project · ` as a prefix, added once; JSON also preserves
-the raw name. Description states the visible flow and expected result. An agent
-can derive naming and descriptions from a natural-language brief. Demio itself
-does not generate workflows with AI.
+A demo is one project-owned folder containing demo.json, AGENTS.md, README.md,
+shared components and one or more scenarios. Demo metadata owns its name,
+description, project, workspace, adapter defaults, shared parameters and an
+explicit list of scenario paths. A scenario references its demo and owns a stable
+run ID, readable name, description, creation time, ordered steps, narration and
+parameter overrides. A step belongs to a scenario and invokes adapter behavior
+by its step ID. Neither a scenario nor a step is another demo.
+
+Demo-relative workspace defaults resolve at demo.json. An explicit scenario
+workspace override resolves beside its scenario JSON. Adapter commands execute
+in the effective workspace. Scenario fields override demo defaults; parameters
+merge by top-level key. Effective parameters and the selected source path reach
+the adapter as DEMIO_PARAMETERS (JSON) and DEMIO_SCENARIO. The adapter owns routes
+and product behavior; Demio does not interpret parameter values.
+
+Registering demo.json validates all declared scenarios and ID conflicts before
+writing timestamps or saving the registry. Scenario files must be inside the
+demo folder and refer back to it. Existing IDs and timestamps survive moving a
+manifest with explicit --replace. Standalone legacy manifests remain readable.
+Their metadata snapshots and demo membership remain visible when files become
+unavailable. One missing sibling does not invalidate a runnable scenario.
+
+The scaffold creates a demo, two parameterized scenarios, one shared adapter and
+page, and local authoring instructions. Generated demo/scenario IDs use six
+alphanumeric characters. The authoring agent must explain terminology and
+controls, discuss audience/outcome/environment/allowed effects, propose a brief
+and agree unresolved product choices with the user before implementing behavior.
+Accepted decisions are retained in the demo README and reused without repeating
+approval questions. Templates own this guidance, not historical chat messages.
 
 `init` records creation time at scenario creation in RFC3339. `register` fills a
 missing timestamp in manually authored manifests and preserves existing values.
 Re-registering edits does not reset the date. Manifests retain source offsets;
 all human-readable timestamps use Europe/Warsaw with date-specific CET/CEST and
-UTC offset. Lists and the selector sort by actual instant, newest first, then ID
-for ties; unknown dates come last. Legacy manifests derive a missing project from
+UTC offset. Plain lists sort by actual instant, newest first, then ID
+for ties; the TUI groups by owning demo, with newest scenarios first within
+each group and groups ordered by their newest scenario; unknown dates come last. Legacy manifests derive a missing project from
 the workspace directory and may have empty descriptions. Their unrecorded dates
 fall back to filesystem creation time, which is an approximation for copied or
 checked-out files. Unavailable manifests use the last registered metadata snapshot.
 Metadata tests cover date order, edits, missing manifests, and summer/winter time.
 
-The interactive selector follows GTD's two-pane TUI: a scrollable list contains
+The interactive selector follows GTD's two-pane TUI: demo headers group scenarios
+in a scrollable list containing
 Warsaw creation date and name, clipped to fit; IDs appear only in details. The
-detail pane groups information by scope and owner: scenario/Presenter (name and
+detail pane groups information by scope and owner: demo/shared components, scenario/Presenter (name and
 description), identity/Registry (ID, project, separate creation date and time),
 environment/Project adapter (manifest and workspace), execution/Demio (session
 limit), and steps/Project adapter (step titles and roles). Blank lines separate
@@ -44,7 +70,7 @@ error and cannot launch. An empty registry still opens the TUI with registration
 guidance. The panels always sit side by side, list left and details right,
 including narrow terminals. Existing stable IDs are preserved. Newest-first ordering and
 exact run IDs remain unchanged. Non-terminal output stays scriptable.
-The selector opens the selected manifest and containing folder in VS Code with
+The selector opens the selected manifest and owning demo root in VS Code with
 e, or reveals the file in Finder with f. These inspection actions never invoke
 adapters. Invalid manifests remain openable; Finder can open a surviving parent
 folder if the manifest is missing. Opening failures stay visible in the selector.
@@ -118,6 +144,8 @@ endpoint, and generic AI-driven application control remain outside this first mi
 
 ## Source map
 
+- `src/demo.rs`: demo manifests, ownership, inheritance and parameters.
+- `templates/demo`: generated user/agent guidance and brief.
 - `src/registry.rs`: manifests, stable identity, configuration.
 - `src/selector.rs`: two-pane terminal demo browser and details.
 - `src/run.rs`: navigation, journaling, terminal and native integration.

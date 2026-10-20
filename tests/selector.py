@@ -81,9 +81,11 @@ for line in sys.stdin:
         assert not (root/'actions.log').exists()
     finally:
         finish(process, master)
+    (root/'demo.json').write_text(json.dumps({'schema_version':1,'id':'example','name':'Example demo','description':'Shared selector components','scenarios':['scenarios/first/scenario.json','scenarios/second/scenario.json']}))
     for day, identity in [(1, 'first'), (2, 'second')]:
-        channel = {'schema_version':1, 'id':identity, 'name':identity.title()+' demonstration', 'project':'Example', 'description':'A local selector check', 'created_at':f'2026-01-0{day}T12:00:00+01:00', 'workspace':'.', 'adapter':[sys.executable, '-u', str(adapter)], 'steps':[{'id':identity+'-step', 'title':identity+' step', 'role':'Presenter', 'say':'Read this'}]}
-        manifest = root/(identity+'.json')
+        channel = {'schema_version':1, 'demo':'../../demo.json', 'id':identity, 'name':identity.title()+' demonstration', 'project':'Example', 'description':'A local selector check', 'created_at':f'2026-01-0{day}T12:00:00+01:00', 'adapter':[sys.executable, '-u', str(adapter)], 'steps':[{'id':identity+'-step', 'title':identity+' step', 'role':'Presenter', 'say':'Read this'}]}
+        manifest = root/f'scenarios/{identity}/scenario.json'
+        manifest.parent.mkdir(parents=True, exist_ok=True)
         manifest.write_text(json.dumps(channel))
         subprocess.run([str(binary), 'register', str(manifest)], env=env, check=True, capture_output=True)
     process, master = start()
@@ -94,8 +96,8 @@ for line in sys.stdin:
         os.write(master, b'f')
         wait_text(master, 'in Finder')
         launches = [json.loads(line) for line in (root/'launches.jsonl').read_text().splitlines()]
-        assert launches[0][1:] == ['--new-window', str(root), str(root/'second.json')], launches
-        assert launches[1][1:] == ['-R', str(root/'second.json')], launches
+        assert launches[0][1:] == ['--new-window', str(root), str(root/'scenarios/second/scenario.json')], launches
+        assert launches[1][1:] == ['-R', str(root/'scenarios/second/scenario.json')], launches
         assert not (root/'actions.log').exists(), 'Opening sources must not execute adapters'
         # Resize while open, scroll details, then select the older demo by list position.
         fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack('HHHH', 24, 80, 0, 0))
@@ -123,7 +125,7 @@ for line in sys.stdin:
         finish(process, master)
     del env['DEMIO_LAUNCH_FAIL']
     before = (root/'actions.log').read_text()
-    (root/'second.json').write_text('{broken')
+    (root/'scenarios/second/scenario.json').write_text('{broken')
     process, master = start()
     try:
         wait_text(master, 'Unavailable:')

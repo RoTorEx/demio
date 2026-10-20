@@ -1,3 +1,4 @@
+mod demo;
 mod protocol;
 mod registry;
 mod run;
@@ -14,7 +15,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
 };
-const HELP: &str = "Demio — one remote for project demos\n\nUsage: demio [COMMAND]\n\n  list [--json]                 List projects, descriptions and creation times\n  register FILE [--replace]      Register a project-owned channel manifest\n  unregister ID                 Remove registry entry, preserve project files\n  validate FILE                 Validate channel without executing code\n  doctor ID                     Ask adapter for a read-only readiness check\n  run ID [--no-overlay] [--auto]  Run by exact channel ID\n  init DIRECTORY                Scaffold a browser demo / adapter example\n  setup-config                  Create missing configuration\n  config                        Print configuration and path\n  themes                        List themes\n  theme NAME                    Set terminal theme\n  update                        Install latest verified release\n  help / --help                 Show this help\n  version / --version           Show version\n\nWithout a command: select a channel interactively (list outside a terminal).\nF9 / Enter: next; F7: previous view; q / Ctrl+C: stop.\n";
+const HELP: &str = "Demio — one remote for project demos\n\nUsage: demio [COMMAND]\n\n  list [--json]                 List demos/scenarios and creation times\n  register FILE [--replace]      Register a demo or scenario manifest\n  unregister ID                 Remove registry entry, preserve project files\n  validate FILE                 Validate demo/scenario without executing code\n  doctor ID                     Ask adapter for a read-only readiness check\n  run ID [--no-overlay] [--auto]  Run by exact scenario ID\n  init DIRECTORY                Scaffold a demo, scenarios and instructions\n  setup-config                  Create missing configuration\n  config                        Print configuration and path\n  themes                        List themes\n  theme NAME                    Set terminal theme\n  update                        Install latest verified release\n  help / --help                 Show this help\n  version / --version           Show version\n\nWithout a command: select a scenario interactively (list outside a terminal).\nF9 / Enter: next; F7: previous view; q / Ctrl+C: stop.\n";
 fn main() {
     if let Err(error) = application() {
         eprintln!("Error: {error:#}");
@@ -61,11 +62,15 @@ fn application() -> Result<()> {
             if args.len() > 3 || (args.len() == 3 && args[2] != "--replace") {
                 bail!("Usage: demio register FILE [--replace]");
             }
-            let id = config.register(
-                Path::new(argument(&args, 1, "demio register FILE [--replace]")?),
-                args.get(2).is_some(),
-            )?;
-            println!("Registered {id}. Run: demio run {id}");
+            let path = Path::new(argument(&args, 1, "demio register FILE [--replace]")?);
+            let ids = if demo::is_demo(path)? {
+                config.register_demo(path, args.get(2).is_some())?
+            } else {
+                vec![config.register(path, args.get(2).is_some())?]
+            };
+            for id in ids {
+                println!("Registered {id}. Run: demio run {id}");
+            }
         }
         "unregister" => {
             let id = argument(&args, 1, "demio unregister ID")?;
@@ -77,14 +82,21 @@ fn application() -> Result<()> {
         }
         "validate" => {
             let path = Path::new(argument(&args, 1, "demio validate FILE")?).canonicalize()?;
-            let channel = Channel::load(&path)?;
-            channel.workspace_path(&path)?;
-            println!(
-                "Valid: {} [{}] — {} steps",
-                channel.name,
-                channel.id,
-                channel.steps.len()
-            );
+            let paths = if demo::is_demo(&path)? {
+                demo::Demo::load(&path)?.scenario_paths(&path)?
+            } else {
+                vec![path]
+            };
+            for path in paths {
+                let channel = Channel::load(&path)?;
+                channel.workspace_path(&path)?;
+                println!(
+                    "Valid scenario: {} [{}] — {} steps",
+                    channel.name,
+                    channel.id,
+                    channel.steps.len()
+                );
+            }
         }
         "doctor" => {
             let (channel, path) = config.resolve(argument(&args, 1, "demio doctor ID")?)?;
@@ -175,12 +187,16 @@ fn list(config: &Config, json: bool) -> Result<()> {
             "No channels registered.\nCreate one: demio init ./my-demo\nRegister it: demio register ./my-demo/channel.json"
         );
     } else {
-        println!("{:<24} NAME / PROJECT", "ID");
+        println!("{:<24} DEMO / SCENARIO", "ID");
         for entry in entries {
             println!(
                 "{:<24} {}{}",
                 entry.id,
-                entry.display_name,
+                entry
+                    .demo
+                    .as_ref()
+                    .map(|demo| format!("{} | {}", demo.name, entry.name))
+                    .unwrap_or_else(|| entry.display_name.clone()),
                 if entry.available {
                     ""
                 } else {
@@ -204,29 +220,77 @@ fn list(config: &Config, json: bool) -> Result<()> {
     Ok(())
 }
 fn scaffold(path: &Path) -> Result<()> {
-    for name in ["channel.json", "adapter.py", "index.html"] {
-        if path.join(name).exists() {
-            bail!("Refusing to overwrite {}", path.join(name).display());
-        }
+    if path.exists() && fs::read_dir(path)?.next().is_some() {
+        bail!(
+            "Refusing to overwrite nonempty demo folder {}",
+            path.display()
+        );
     }
-    fs::create_dir_all(path)?;
-    let mut channel: serde_json::Value =
-        serde_json::from_str(include_str!("../examples/browser/channel.json"))?;
-    channel["created_at"] = serde_json::to_value(registry::now())?;
+    fn id() -> Result<String> {
+        use std::io::Read;
+        let mut bytes = [0u8; 6];
+        fs::File::open("/dev/urandom")?.read_exact(&mut bytes)?;
+        let alphabet = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        Ok(bytes
+            .iter()
+            .map(|byte| alphabet[*byte as usize % alphabet.len()] as char)
+            .collect())
+    }
+    for folder in ["shared", "scenarios/request", "scenarios/expedited"] {
+        fs::create_dir_all(path.join(folder))?;
+    }
+    let demo_id = id()?;
+    let first_id = id()?;
+    let mut second_id = id()?;
+    while second_id == first_id {
+        second_id = id()?;
+    }
+    let demo = serde_json::json!({"schema_version":1,"id":demo_id,"name":"Browser requests","project":"Demio","description":"Submit and approve local browser requests using shared components.","workspace":".","adapter":[".venv/bin/python","-u","shared/adapter.py"],"session_seconds":7200,"parameters":{"summary":"New laptop for the design team","reason":"Our current laptop needs replacement.","start_path":"/"},"scenarios":["scenarios/request/scenario.json","scenarios/expedited/scenario.json"]});
     fs::write(
-        path.join("channel.json"),
-        format!("{}\n", serde_json::to_string_pretty(&channel)?),
+        path.join("demo.json"),
+        format!("{}\n", serde_json::to_string_pretty(&demo)?),
     )?;
-    fs::write(
-        path.join("adapter.py"),
-        include_str!("../examples/browser/adapter.py"),
-    )?;
-    fs::write(
-        path.join("index.html"),
-        include_str!("../examples/browser/index.html"),
-    )?;
+    for (variant, identity) in [("request", first_id), ("expedited", second_id)] {
+        let mut scenario: serde_json::Value =
+            serde_json::from_str(include_str!("../examples/browser/channel.json"))?;
+        for key in ["adapter", "workspace", "project", "session_seconds"] {
+            scenario
+                .as_object_mut()
+                .context("Invalid example")?
+                .remove(key);
+        }
+        scenario["id"] = identity.into();
+        scenario["demo"] = "../../demo.json".into();
+        scenario["created_at"] = serde_json::to_value(registry::now())?;
+        if variant == "expedited" {
+            scenario["name"] = "Expedited request".into();
+            scenario["description"] =
+                "Approve an urgent laptop request using the same shared actions.".into();
+            scenario["parameters"] = serde_json::json!({"summary":"Urgent laptop replacement","reason":"The current laptop stopped working."});
+            scenario["steps"][1]["say"] =
+                "I enter the urgent replacement request and explain why it needs priority.".into();
+        }
+        fs::write(
+            path.join(format!("scenarios/{variant}/scenario.json")),
+            format!("{}\n", serde_json::to_string_pretty(&scenario)?),
+        )?;
+    }
+    for (name, content) in [
+        ("AGENTS.md", include_str!("../templates/demo/AGENTS.md")),
+        ("README.md", include_str!("../templates/demo/README.md")),
+        (
+            "shared/adapter.py",
+            include_str!("../examples/browser/adapter.py"),
+        ),
+        (
+            "shared/index.html",
+            include_str!("../examples/browser/index.html"),
+        ),
+    ] {
+        fs::write(path.join(name), content)?;
+    }
     println!(
-        "Created {}\nNext: prepare a Python venv with Playwright, then demio register {}/channel.json.\nSee https://github.com/RoTorEx/demio#browser-example",
+        "Created demo {} with two scenarios and shared components. Read AGENTS.md and agree the brief in README.md before adapting it. Next: demio register {}/demo.json",
         path.display(),
         path.display()
     );
