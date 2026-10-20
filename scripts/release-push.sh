@@ -1,6 +1,6 @@
 #!/bin/sh
 set -eu
-version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml)
+version=$(sed -n 's/^version = "\(.*\)"/\1/p' demio-cli/Cargo.toml)
 tag="v$version"
 [ -z "$(git status --porcelain)" ] || { echo 'Worktree must be clean' >&2; exit 1; }
 [ "$(git branch --show-current)" = main ] || exit 1

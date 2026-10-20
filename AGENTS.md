@@ -1,5 +1,5 @@
 ---
-version: "2026-10-20.1"
+version: "2026-10-20.2"
 ---
 
 # AGENTS.md
@@ -45,5 +45,7 @@ This project uses committed local copies of the Vibecoding Kernel.
 - For demo/scenario authoring, read `docs/scenarios.md` and the generated local
   `AGENTS.md`; its source is `templates/demo/AGENTS.md`.
 - Read `README.md` and the Makefile for supported commands and delivery.
-- The CLI and sequencing are Rust; native window code is a small macOS helper.
+- This product belongs under `personal/products/demio`. `demio-cli/` owns the
+  Rust terminal component (command `demio`); `demio-overlay/` owns the Swift
+  native window. Build and release both from the product root.
 - Keep public examples independent of customer data, paths, and credentials.

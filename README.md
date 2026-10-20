@@ -1,5 +1,24 @@
 # Demio
 
+Demio is a product with two components: **demio-cli** (Rust; public command
+`demio`) and **demio-overlay** (Swift/AppKit; the native presenter window).
+The checkout belongs under `personal/products/demio`, with a shared version,
+package, and release workflow for both components.
+
+```text
+demio/
+  Cargo.toml
+  demio-cli/
+    Cargo.toml
+    src/
+  demio-overlay/
+    Overlay.swift
+  templates/
+  examples/
+  scripts/
+  tests/
+```
+
 One Rust CLI remote for project demos. Register a workflow, choose its stable ID,
 and advance at your speaking pace. Project adapters drive the application; Demio
 owns sequencing, timeouts, controls, and speaker notes.

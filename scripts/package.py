@@ -5,7 +5,7 @@ from pathlib import Path
 import tarfile
 import re
 root = Path(__file__).resolve().parents[1]
-version = re.search(r'^version = "([^"]+)"', (root/'Cargo.toml').read_text(), re.M).group(1)
+version = re.search(r'^version = "([^"]+)"', (root/'demio-cli/Cargo.toml').read_text(), re.M).group(1)
 target = Path(os.environ.get('CARGO_TARGET_DIR', str(Path.home()/'construction_side/demio/target')))
 out = target.parent/'dist'
 out.mkdir(parents=True, exist_ok=True)

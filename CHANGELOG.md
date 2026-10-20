@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Organize Demio as a product under personal/products/demio, with separate
+  demio-cli and demio-overlay components in one build/release workspace. Keep
+  the public demio command stable and update editor project registrations.
+
 - Separate demo containers from scenarios: shared defaults and parameterized
   adapters, per-scenario paths/narration, grouped TUI, batch registration, and
   source opening at the owning demo root.

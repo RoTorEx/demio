@@ -1,5 +1,16 @@
 # Demio product truth
 
+## Product components
+
+Demio is a product under personal/products/demio, comprising demio-cli and
+demio-overlay. demio-cli owns the terminal entry point (`demio`), TUI, registry,
+adapter protocol, sequencing and process cleanup. demio-overlay owns the native
+macOS presenter window and global controls, with no project-action authority.
+The components are built from one Cargo workspace/product root, versioned and
+packaged together, and installed side by side. The Rust package is demio-cli;
+the stable public executable remains demio. Component README files explain
+these boundaries.
+
 ## Purpose and actors
 
 A presenter needs to narrate a repeatable demo while automation performs visible
@@ -144,13 +155,13 @@ endpoint, and generic AI-driven application control remain outside this first mi
 
 ## Source map
 
-- `src/demo.rs`: demo manifests, ownership, inheritance and parameters.
+- `demio-cli/src/demo.rs`: demo manifests, ownership, inheritance and parameters.
 - `templates/demo`: generated user/agent guidance and brief.
-- `src/registry.rs`: manifests, stable identity, configuration.
-- `src/selector.rs`: two-pane terminal demo browser and details.
-- `src/run.rs`: navigation, journaling, terminal and native integration.
-- `src/protocol.rs`: persistent adapter, timeouts, process lifecycle.
-- `native/Overlay.swift`: controls, movable/resizable speaker notes.
+- `demio-cli/src/registry.rs`: manifests, stable identity, configuration.
+- `demio-cli/src/selector.rs`: two-pane terminal demo browser and details.
+- `demio-cli/src/run.rs`: navigation, journaling, terminal and native integration.
+- `demio-cli/src/protocol.rs`: persistent adapter, timeouts, process lifecycle.
+- `demio-overlay/Overlay.swift`: controls, movable/resizable speaker notes.
 - `docs/scenarios.md`: scenario structure and manual editing workflow.
 - `docs/contracts/adapter.md`: project-agent integration and protocol.
 - `examples/browser`: local browser walkthrough.

@@ -32,12 +32,17 @@ vibe-propose:
 CARGO_TARGET_DIR ?= $(HOME)/construction_side/demio/target
 export CARGO_TARGET_DIR
 
+.PHONY: build-cli build-overlay
 .PHONY: install build test lint fmt check run package smoke-install install-local release release-push
 install:
 	cargo fetch --locked
-build:
+build: build-cli build-overlay
+
+build-cli:
 	cargo build --release --locked
-	xcrun swiftc native/Overlay.swift -o "$(CARGO_TARGET_DIR)/release/demio-overlay" -framework AppKit -framework Carbon -target arm64-apple-macosx14.0
+build-overlay:
+	@mkdir -p "$(CARGO_TARGET_DIR)/release"
+	xcrun swiftc demio-overlay/Overlay.swift -o "$(CARGO_TARGET_DIR)/release/demio-overlay" -framework AppKit -framework Carbon -target arm64-apple-macosx14.0
 lint:
 	cargo fmt --all -- --check
 	cargo clippy --locked --all-targets -- -D warnings
@@ -58,7 +63,7 @@ package: build
 smoke-install: package
 	python3 tests/install.py "$(CARGO_TARGET_DIR)/../dist"
 install-local: package
-	sh scripts/install.sh --archive "$(CARGO_TARGET_DIR)/../dist/demio-v$$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml)-aarch64-apple-darwin.tar.gz"
+	sh scripts/install.sh --archive "$(CARGO_TARGET_DIR)/../dist/demio-v$$(sed -n 's/^version = "\(.*\)"/\1/p' demio-cli/Cargo.toml)-aarch64-apple-darwin.tar.gz"
 release:
 	python3 scripts/release.py
 release-push:

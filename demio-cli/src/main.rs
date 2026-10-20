@@ -252,7 +252,7 @@ fn scaffold(path: &Path) -> Result<()> {
     )?;
     for (variant, identity) in [("request", first_id), ("expedited", second_id)] {
         let mut scenario: serde_json::Value =
-            serde_json::from_str(include_str!("../examples/browser/channel.json"))?;
+            serde_json::from_str(include_str!("../../examples/browser/channel.json"))?;
         for key in ["adapter", "workspace", "project", "session_seconds"] {
             scenario
                 .as_object_mut()
@@ -276,15 +276,15 @@ fn scaffold(path: &Path) -> Result<()> {
         )?;
     }
     for (name, content) in [
-        ("AGENTS.md", include_str!("../templates/demo/AGENTS.md")),
-        ("README.md", include_str!("../templates/demo/README.md")),
+        ("AGENTS.md", include_str!("../../templates/demo/AGENTS.md")),
+        ("README.md", include_str!("../../templates/demo/README.md")),
         (
             "shared/adapter.py",
-            include_str!("../examples/browser/adapter.py"),
+            include_str!("../../examples/browser/adapter.py"),
         ),
         (
             "shared/index.html",
-            include_str!("../examples/browser/index.html"),
+            include_str!("../../examples/browser/index.html"),
         ),
     ] {
         fs::write(path.join(name), content)?;

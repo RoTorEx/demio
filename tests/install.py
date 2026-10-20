@@ -7,7 +7,7 @@ import tempfile
 import re
 base=Path.home()/'construction_side/demio/checks';base.mkdir(parents=True,exist_ok=True)
 project=Path(__file__).resolve().parents[1]
-version=re.search(r'^version = "([^"]+)"',(project/'Cargo.toml').read_text(),re.M).group(1)
+version=re.search(r'^version = "([^"]+)"',(project/'demio-cli/Cargo.toml').read_text(),re.M).group(1)
 archive=Path(sys.argv[1]).resolve()/f'demio-v{version}-aarch64-apple-darwin.tar.gz'
 installer=Path(__file__).resolve().parents[1]/'scripts/install.sh'
 with tempfile.TemporaryDirectory(dir=base) as temporary:
