@@ -5,7 +5,8 @@
 A presenter needs to narrate a repeatable demo while automation performs visible
 application steps. A project agent prepares the environment, manifest, and
 adapter. The presenter registers the channel, selects its ID, speaks, and presses
-Next. Viewers see the application; the presenter reads a separate notes window.
+Next. Viewers see the application; the presenter reads notes in the same window
+as the controls.
 
 ## Concepts and invariants
 
@@ -26,13 +27,24 @@ fall back to filesystem creation time, which is an approximation for copied or
 checked-out files. Unavailable manifests use the last registered metadata snapshot.
 Metadata tests cover date order, edits, missing manifests, and summer/winter time.
 
+The interactive selector follows GTD's two-pane TUI: a scrollable list contains
+stable ID, Warsaw creation date, and name; the detail pane shows full metadata,
+manifest path, workspace, session limit, and step titles/roles. Selection updates
+details without invoking adapters. Long cells are clipped, with full text in the
+details pane. PageUp/PageDown scroll details; unavailable demos display their
+error and cannot launch. An empty registry still opens the TUI with registration
+guidance. Below 100 terminal columns the panes stack to retain reading space;
+this is a presentation threshold, not a domain limit. Newest-first ordering and
+exact run IDs remain unchanged. Non-terminal output stays scriptable.
+
 Ordering the channel list never changes identity. Manifests remain owned by their projects. Registry replacement
 requires an explicit flag when it changes the source file. Removing registration
 preserves source data.
 
 A step contains its ID, title, role, narration text, and operation timeout.
-The presenter speaks; there is no synthesized audio. The remote window contains
-only Back and Next. Speaker notes are independently movable and resizable.
+The presenter speaks; there is no synthesized audio. The presenter window
+combines Back, Next, and speaker notes in one movable,
+resizable panel. Controls and narration stay together when moving or resizing.
 A−/A+ changes notes font size in two-point increments, from 14 to 48 points,
 with a 22-point default. This reading range keeps small text legible and large
 text usable with wrapping. Left, center, and right alignment apply to the full
@@ -83,18 +95,19 @@ Demio terminates that group and deletes its per-session runtime directory at exi
 A parent crash cannot guarantee cleanup of arbitrary external side effects.
 
 Presenter notes and controls should remain visible to the presenter and absent
-from the demo recording. Both native panels request the same legacy capture
+from the demo recording. The combined native panel requests the same legacy capture
 exclusion (`NSWindow.sharingType = .none`) as the original project-specific remote;
-the native smoke check protects this setting on both windows. Modern macOS
+the native smoke check protects this setting on the single window. Modern macOS
 ScreenCaptureKit recorders may ignore it, so the flag is not a universal guarantee.
 Verify a short saved output with the actual recorder and macOS version. Where the
-flag is ignored, exclude Demio in the recorder or keep both panels outside the
+flag is ignored, exclude Demio in the recorder or keep the panel outside the
 selected recording region. Screen recording itself, speech synthesis, a phone
 endpoint, and generic AI-driven application control remain outside this first minor.
 
 ## Source map
 
 - `src/registry.rs`: manifests, stable identity, configuration.
+- `src/selector.rs`: two-pane terminal demo browser and details.
 - `src/run.rs`: navigation, journaling, terminal and native integration.
 - `src/protocol.rs`: persistent adapter, timeouts, process lifecycle.
 - `native/Overlay.swift`: controls, movable/resizable speaker notes.

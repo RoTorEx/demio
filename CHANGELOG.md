@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Combine navigation buttons and speaker notes in one movable, resizable native
+  presenter window, preserving font, alignment, hotkeys, and capture exclusion.
+- Replace the selector with a GTD-style two-pane TUI: scrollable ID/date/name
+  list and full scenario details, including workspace and steps. Support empty
+  registries, unavailable demos, detail scrolling, and narrow terminals.
+
 ## [0.1.4] - 2026-10-19
 
 - Restore the original presenter remote's capture-exclusion flag on both native

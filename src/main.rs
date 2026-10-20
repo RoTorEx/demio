@@ -1,24 +1,18 @@
 mod protocol;
 mod registry;
 mod run;
+mod selector;
 use anyhow::{Context, Result, bail};
-use crossterm::{
-    cursor,
-    event::{self, Event, KeyCode},
-    execute,
-    terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
-};
 use registry::{Channel, Config, THEMES, config_path};
 use std::{
     fs,
-    io::{self, IsTerminal, Write},
+    io::{self, IsTerminal},
     path::Path,
     process::Command,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
-    time::Duration,
 };
 const HELP: &str = "Demio — one remote for project demos\n\nUsage: demio [COMMAND]\n\n  list [--json]                 List projects, descriptions and creation times\n  register FILE [--replace]      Register a project-owned channel manifest\n  unregister ID                 Remove registry entry, preserve project files\n  validate FILE                 Validate channel without executing code\n  doctor ID                     Ask adapter for a read-only readiness check\n  run ID [--no-overlay] [--auto]  Run by exact channel ID\n  init DIRECTORY                Scaffold a browser demo / adapter example\n  setup-config                  Create missing configuration\n  config                        Print configuration and path\n  themes                        List themes\n  theme NAME                    Set terminal theme\n  update                        Install latest verified release\n  help / --help                 Show this help\n  version / --version           Show version\n\nWithout a command: select a channel interactively (list outside a terminal).\nF9 / Enter: next; F7: previous view; q / Ctrl+C: stop.\n";
 fn main() {
@@ -52,7 +46,7 @@ fn application() -> Result<()> {
             if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
                 return list(&config, false);
             }
-            if let Some(id) = choose(&config, &cancelled)? {
+            if let Some(id) = selector::choose(&config, &cancelled)? {
                 let (channel, path) = config.resolve(&id)?;
                 run::run(channel, path, &config.theme, false, false, cancelled)?;
             }
@@ -208,63 +202,6 @@ fn list(config: &Config, json: bool) -> Result<()> {
         }
     }
     Ok(())
-}
-fn choose(config: &Config, cancelled: &AtomicBool) -> Result<Option<String>> {
-    if config.channels.is_empty() {
-        list(config, false)?;
-        return Ok(None);
-    }
-    struct Restore;
-    impl Drop for Restore {
-        fn drop(&mut self) {
-            let _ = execute!(io::stdout(), cursor::Show, LeaveAlternateScreen);
-            let _ = terminal::disable_raw_mode();
-        }
-    }
-    terminal::enable_raw_mode()?;
-    execute!(io::stdout(), EnterAlternateScreen, cursor::Hide)?;
-    let _restore = Restore;
-    let entries = config.listing();
-    let ids: Vec<_> = entries.iter().map(|entry| entry.id.clone()).collect();
-    let mut selected = 0;
-    loop {
-        if cancelled.load(Ordering::Relaxed) {
-            return Ok(None);
-        }
-        execute!(
-            io::stdout(),
-            cursor::MoveTo(0, 0),
-            terminal::Clear(terminal::ClearType::All)
-        )?;
-        print!("Demio — select a channel\r\n\r\n    {:<24} NAME\r\n", "ID");
-        for (n, id) in ids.iter().enumerate() {
-            print!(
-                " {}  {:<24} {}\r\n",
-                if n == selected { ">" } else { " " },
-                id,
-                entries[n].display_name
-            );
-        }
-        let selected_entry = &entries[selected];
-        print!(
-            "\r\n{}\r\nCreated: {} Warsaw\r\n",
-            selected_entry.description.replace('\n', "\r\n"),
-            selected_entry.created_label()
-        );
-        print!("\r\n↑/↓ Select   Enter Run   q Quit\r\n");
-        io::stdout().flush()?;
-        if event::poll(Duration::from_millis(500))? {
-            if let Event::Key(key) = event::read()? {
-                match key.code {
-                    KeyCode::Up => selected = selected.saturating_sub(1),
-                    KeyCode::Down => selected = (selected + 1).min(ids.len() - 1),
-                    KeyCode::Enter => return Ok(Some(ids[selected].clone())),
-                    KeyCode::Char('q') | KeyCode::Char('c') | KeyCode::Esc => return Ok(None),
-                    _ => (),
-                }
-            }
-        }
-    }
 }
 fn scaffold(path: &Path) -> Result<()> {
     for name in ["channel.json", "adapter.py", "index.html"] {

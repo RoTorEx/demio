@@ -75,6 +75,6 @@ executes all steps; use only after the project authorizes those actions.
 
 The macOS helper reads `panel.json` from the owned session directory and sends
 `next` / `previous` commands to the Rust CLI. It never invokes an adapter itself.
-The separate notes window follows the active step's `say` text and role, and
-retains user-adjusted position and size during the session. Both windows close
-when the CLI exits. F7/F9 work globally; no F1 hide/show control exists.
+The combined presenter window contains Back/Next and the active step's `say`
+text and role, and retains user-adjusted position and size during the session.
+The window closes when the CLI exits. F7/F9 work globally; no F1 hide/show control exists.

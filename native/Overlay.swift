@@ -11,8 +11,9 @@ let session = URL(fileURLWithPath: CommandLine.arguments[1])
 let owner = Int32(CommandLine.arguments[2]) ?? 0
 func send(_ command: String) { print(command); fflush(stdout) }
 final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
-    var remote: NSPanel!
     var notes: NSPanel!
+    var back: NSButton!
+    var next: NSButton!
     let cue = NSTextView()
     let title = NSTextField(labelWithString: "Ready")
     var last = Data()
@@ -86,20 +87,16 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         restoreSettings()
         let top = NSScreen.main?.visibleFrame.maxY ?? 850
-        remote = panel(NSRect(x: 25, y: top-110, width: 190, height: 54), title: "Demio", resizable: false)
+        notes = panel(NSRect(x: 25, y: top-420, width: 480, height: 340), title: "Demio", resizable: true)
+        notes.minSize = NSSize(width: 400, height: 260)
         let row = NSStackView()
         row.orientation = .horizontal
         row.distribution = .fillEqually
         row.spacing = 10
-        row.translatesAutoresizingMaskIntoConstraints = false
-        let back = NSButton(title: "← Back", target: self, action: #selector(previous))
-        let next = NSButton(title: "Next →", target: self, action: #selector(forward))
+        back = NSButton(title: "← Back", target: self, action: #selector(previous))
+        next = NSButton(title: "Next →", target: self, action: #selector(forward))
         back.bezelStyle = .rounded; next.bezelStyle = .rounded
         row.addArrangedSubview(back); row.addArrangedSubview(next)
-        remote.contentView!.addSubview(row)
-        NSLayoutConstraint.activate([row.leadingAnchor.constraint(equalTo: remote.contentView!.leadingAnchor, constant: 10), row.trailingAnchor.constraint(equalTo: remote.contentView!.trailingAnchor, constant: -10), row.centerYAnchor.constraint(equalTo: remote.contentView!.centerYAnchor)])
-        notes = panel(NSRect(x: 25, y: top-400, width: 440, height: 250), title: "Demio · Speaker notes", resizable: true)
-        notes.minSize = NSSize(width: 360, height: 190)
         let body = NSStackView()
         body.orientation = .vertical
         body.alignment = .leading
@@ -132,10 +129,10 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
         alignmentPicker = NSSegmentedControl(labels: ["Left", "Center", "Right"], trackingMode: .selectOne, target: self, action: #selector(changeAlignment))
         alignmentPicker.selectedSegment = textAlignment == .center ? 1 : textAlignment == .right ? 2 : 0
         for view in [smaller!, fontLabel, larger!, alignmentPicker!] { controls.addArrangedSubview(view) }
-        body.addArrangedSubview(title); body.addArrangedSubview(controls); body.addArrangedSubview(scroll)
+        body.addArrangedSubview(title); body.addArrangedSubview(controls); body.addArrangedSubview(scroll); body.addArrangedSubview(row)
         notes.contentView!.addSubview(body)
-        NSLayoutConstraint.activate([body.leadingAnchor.constraint(equalTo: notes.contentView!.leadingAnchor, constant: 15), body.trailingAnchor.constraint(equalTo: notes.contentView!.trailingAnchor, constant: -15), body.topAnchor.constraint(equalTo: notes.contentView!.topAnchor, constant: 12), body.bottomAnchor.constraint(equalTo: notes.contentView!.bottomAnchor, constant: -12), scroll.widthAnchor.constraint(equalTo: body.widthAnchor)])
-        remote.orderFrontRegardless(); notes.orderFrontRegardless()
+        NSLayoutConstraint.activate([body.leadingAnchor.constraint(equalTo: notes.contentView!.leadingAnchor, constant: 15), body.trailingAnchor.constraint(equalTo: notes.contentView!.trailingAnchor, constant: -15), body.topAnchor.constraint(equalTo: notes.contentView!.topAnchor, constant: 12), body.bottomAnchor.constraint(equalTo: notes.contentView!.bottomAnchor, constant: -12), scroll.widthAnchor.constraint(equalTo: body.widthAnchor), row.widthAnchor.constraint(equalTo: body.widthAnchor), scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 60)])
+        notes.orderFrontRegardless()
         installKeys()
         timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in self?.refresh() }
         refresh()
@@ -144,13 +141,22 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
     func smoke() {
-        guard remote.sharingType == .none, notes.sharingType == .none else { exit(11) }
-        guard let buttons = (remote.contentView?.subviews.first as? NSStackView)?.arrangedSubviews as? [NSButton], buttons.count == 2,
-              !remote.styleMask.contains(.resizable), notes.styleMask.contains(.resizable), !cue.string.isEmpty else { exit(3) }
+        guard notes.sharingType == .none else { exit(11) }
+        guard NSApp.windows.filter({ $0.isVisible }).count == 1,
+              back.window === notes, next.window === notes, cue.window === notes,
+              notes.styleMask.contains(.resizable), !cue.string.isEmpty else { exit(3) }
         let original = notes.frame
         notes.setFrame(NSRect(x: original.minX+30, y: original.minY+20, width: 600, height: 360), display: true)
         notes.contentView?.layoutSubtreeIfNeeded()
         guard notes.frame.width == 600, notes.frame.height == 360 else { exit(4) }
+        notes.setContentSize(NSSize(width: 400, height: 260))
+        notes.contentView?.layoutSubtreeIfNeeded()
+        guard let content = notes.contentView else { exit(12) }
+        for control in [back!, next!, smaller!, larger!] {
+            let rect = control.convert(control.bounds, to: content)
+            guard content.bounds.contains(rect), rect.width > 0, rect.height > 0 else { exit(12) }
+        }
+        notes.setFrame(NSRect(x: original.minX+30, y: original.minY+20, width: 600, height: 360), display: true)
         let originalFont = fontSize
         larger.performClick(nil)
         guard fontSize == min(48, originalFont+2), cue.font?.pointSize == fontSize else { exit(5) }
@@ -170,8 +176,18 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
         fontSize = 22; textAlignment = .left; restoreSettings()
         guard fontSize == 30, textAlignment == .right else { exit(8) }
         alignmentPicker.selectedSegment = 0; changeAlignment()
-        buttons[0].performClick(nil); buttons[1].performClick(nil)
-        for (name, window) in [("remote", remote!), ("notes", notes!)] {
+        let retainedFrame = notes.frame
+        for status in ["Working", "Failed", "Ready"] {
+            let state = ["status": status, "channel": "Native check", "step": "3/5", "role": "Approver", "title": "Updated step", "say": "Updated narration stays with the controls."]
+            guard let data = try? JSONSerialization.data(withJSONObject: state) else { exit(13) }
+            do { try data.write(to: session.appendingPathComponent("panel.json")) } catch { exit(13) }
+            refresh()
+            guard back.isEnabled == (status == "Ready"), next.isEnabled == (status == "Ready"),
+                  cue.string.contains("Updated narration"), cue.font?.pointSize == fontSize,
+                  notes.frame == retainedFrame else { exit(13) }
+        }
+        back.performClick(nil); next.performClick(nil)
+        for (name, window) in [("presenter", notes!)] {
             if let view = window.contentView, let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
                 view.cacheDisplay(in: view.bounds, to: bitmap)
                 if let png = bitmap.representation(using: .png, properties: [:]) {
@@ -179,7 +195,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 }
             }
         }
-        fputs("Native UI: capture-exclusion flags on both panels, two remote controls, move/resize, font size, alignment and saved preferences passed.\n", stderr)
+        fputs("Native UI: one combined capture-excluded panel, navigation controls, move/resize, font size, alignment and saved preferences passed.\n", stderr)
         NSApp.terminate(nil)
     }
     @objc func previous() { send("previous") }
@@ -198,9 +214,8 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
             cue.scrollRangeToVisible(NSRange(location: 0, length: 0))
         }
         // Ignore repeated button presses while an operation is in flight.
-        (remote.contentView?.subviews.first as? NSStackView)?.arrangedSubviews.forEach {
-            ($0 as? NSButton)?.isEnabled = state["status"] == "Ready"
-        }
+        back.isEnabled = state["status"] == "Ready"
+        next.isEnabled = state["status"] == "Ready"
     }
     func installKeys() {
         let callback: EventHandlerUPP = { _, event, pointer in

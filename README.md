@@ -36,10 +36,17 @@ demio run browser-demo
 
 `list` shows stable IDs, project-prefixed names, descriptions, and creation times
 in Europe/Warsaw with the date's CET/CEST offset. Newest scenarios appear first;
-the selector uses the same order and shows the selected scenario's description.
+the selector uses the same order.
 `run` takes an exact ID, independent of list order. JSON output adds `project`,
 `description`, `created_at`, and `display_name` while retaining the original `name`.
-Run `demio` without arguments for the interactive selector. Registration stores a
+Run `demio` without arguments for the two-pane TUI, following GTD: the list
+shows ID, Warsaw creation date, and name; details show the full name, description,
+creation time, manifest, workspace, session limit, and steps. Long list cells are
+clipped; the full ID and name remain in details. Use ↑/↓ or j/k to select,
+PgUp/PgDn to scroll details, Enter to run, and q/Esc to quit. Below 100 terminal
+columns, the panes stack vertically to keep details readable. Empty registries
+show registration guidance; unavailable demos show the error and cannot launch.
+Outside a terminal, `demio` still prints the plain list. Registration stores a
 reference to the manifest, so project-owned workflow changes are read on launch.
 `demio init` records `created_at` automatically in the manifest. For manually
 authored manifests, `register` adds it if missing and preserves it on subsequent
@@ -54,29 +61,27 @@ Use `register FILE --replace` to explicitly replace an ID registered elsewhere.
 
 ## Controls and speaker notes
 
-Two independent floating windows appear during an interactive session:
-
-- A compact movable gray glass remote containing only **Back** and **Next**.
-- A movable, resizable speaker notes window showing the step, role, status, and
-  text you read aloud. Long text scrolls; resizing changes its wrapping. Use
-  **A− / A+** to change font size and **Left / Center / Right** for alignment.
-  These preferences persist in `speaker-notes.json` beside the CLI config.
+One movable, resizable gray glass presenter window contains **Back**, **Next**,
+the current step, role, status, and the text you read aloud. Navigation stays in
+the same window as the notes. Long text scrolls and wraps as the window resizes.
+Use **A− / A+** to change font size and **Left / Center / Right** for alignment.
+These preferences persist in `speaker-notes.json` beside the CLI config.
 
 F9 advances; F7 previews the previous completed step. Depending on your keyboard
 settings, use Fn+F9 / Fn+F7. In the terminal, Enter advances and q / Ctrl+C exits.
-There is no hide/show button or F1 toggle. Exit from the terminal to close both
-windows and clean up the session. Use `--no-overlay` for terminal controls only.
+There is no hide/show button or F1 toggle. Exit from the terminal to close the
+window and clean up the session. Use `--no-overlay` for terminal controls only.
 
 Back is a **view**, not undo. Moving forward through completed steps previews
 without repeating writes. Next is blocked while working or after an error.
 Timeouts report an unknown outcome and never trigger automatic retries.
 
-Both windows request capture exclusion (`NSWindow.sharingType = .none`), matching
+The window requests capture exclusion (`NSWindow.sharingType = .none`), matching
 the original presenter remote. This keeps controls and notes visible to the
 presenter while excluding them in recorders that honor that flag. Modern
 ScreenCaptureKit recorders, including full-display recording through ⌘⇧5 on newer
 macOS versions, can ignore it. Check a short saved recording on the recording Mac
-before a demo. If either window appears, position both outside the recorded region
+before a demo. If the window appears, position it outside the recorded region
 or use a recorder that explicitly excludes Demio. Demio does not include recording
 or a phone server.
 
@@ -105,8 +110,8 @@ credentials, permission to mutate external services, or a paid model budget.
 
 Like the neighboring personal CLIs, Demio provides `help`, `version`, `update`,
 `setup-config`, `config`, `themes`, and `theme NAME`. Themes: calm, classic,
-forest, sunset, ocean, midnight. Themes affect the terminal; both native windows
-keep the neutral glass appearance.
+forest, sunset, ocean, midnight. Themes affect the terminal; the native window
+keeps the neutral glass appearance.
 
 Config: `$DEMIO_CONFIG`, or `$XDG_CONFIG_HOME/demio/config.toml`, defaulting to
 `~/.config/demio/config.toml`. The registry and theme live there. A minimal last
