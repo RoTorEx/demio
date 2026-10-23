@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Retire old default-home executable bundles after a verified installation, preserve user state and keep one prepared local archive.
+
 ## [0.1.7] - 2026-10-20
 
 - Move presenter font size and alignment into the shared config.toml [overlay]

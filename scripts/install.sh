@@ -96,6 +96,29 @@ if not (root/'config.toml').exists():
 subprocess.run([str(root/'bin/demio'), '--overlay-settings'],
                env=dict(os.environ, DEMIO_CONFIG=str(root/'config.toml')),
                stdout=subprocess.DEVNULL, check=True)
+# The old default home is retired only after the replacement works. Preserve
+# any user state there; delete only recognizable executable bundles and links.
+if root == pathlib.Path.home()/'.x-product-demio':
+    legacy_root = pathlib.Path.home()/'.x-cli-demio'
+    legacy_versions = legacy_root/'versions'
+    allowed = {'demio', 'demio-overlay', 'demio-install.sh', 'VERSION', 'LICENSE'}
+    def owned_bundle(path):
+        return (path.is_dir() and not path.is_symlink()
+                and {p.name for p in path.iterdir()} == allowed
+                and all(p.is_file() and not p.is_symlink() for p in path.iterdir()))
+    bundles = list(legacy_versions.iterdir()) if legacy_versions.is_dir() and not legacy_versions.is_symlink() else []
+    if all(owned_bundle(path) for path in bundles):
+        legacy_bin = legacy_root/'bin'
+        if legacy_bin.is_symlink() and legacy_bin.resolve() in bundles:
+            legacy_bin.unlink()
+        elif owned_bundle(legacy_bin):
+            shutil.rmtree(legacy_bin)
+        if legacy_versions.is_dir() and not legacy_versions.is_symlink():
+            shutil.rmtree(legacy_versions)
+        try:
+            legacy_root.rmdir()
+        except OSError:
+            pass
 PYINSTALL
 if [ "$path_update" = 1 ]; then
   python3 - "$install_root/bin" "$HOME/.zshrc" <<'PY'

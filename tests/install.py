@@ -46,7 +46,13 @@ with tempfile.TemporaryDirectory(dir=base) as temporary:
     for key in ('DEMIO_HOME','DEMIO_CONFIG','DEMIO_INSTALL_DIR','XDG_CONFIG_HOME'):
         default_env.pop(key,None)
     default_command=['sh',str(installer),'--archive',str(archive)]
+    retired=home/'.x-cli-demio';(retired/'versions').mkdir(parents=True)
+    shutil.copytree(install/'bin',retired/'versions/old')
+    (retired/'bin').symlink_to(retired/'versions/old')
+    (retired/'user-state.txt').write_text('preserve')
     subprocess.run(default_command,check=True,env=default_env)
+    assert not (retired/'bin').exists() and not (retired/'versions').exists()
+    assert (retired/'user-state.txt').read_text()=='preserve'
     managed=home/'.x-product-demio'
     assert 'theme = "forest"' in (managed/'config.toml').read_text()
     assert not (managed/'speaker-notes.json').exists()

@@ -18,4 +18,8 @@ with tarfile.open(archive, 'w:gz') as bundle:
         bundle.add(source, arcname=destination, recursive=False)
 (archive.with_name(name+'.sha256')).write_text(hashlib.sha256(archive.read_bytes()).hexdigest()+'  '+name+'\n')
 (out/'install.sh').write_bytes((root/'scripts/install.sh').read_bytes())
+for previous in out.glob('demio-v*-aarch64-apple-darwin.tar.gz*'):
+    if (re.fullmatch(r'demio-v\d+\.\d+\.\d+-aarch64-apple-darwin\.tar\.gz(?:\.sha256)?', previous.name)
+            and previous.name not in {name, name+'.sha256'} and previous.is_file() and not previous.is_symlink()):
+        previous.unlink()
 print(archive)

@@ -17,7 +17,9 @@ The source repository owns product code, templates and public examples. The
 installed product home defaults to ~/.x-product-demio (DEMIO_HOME overrides it).
 Its bin directory contains exactly one current CLI/overlay bundle; verified
 updates replace it and preserve data. Old same-root version bundles are removed
-only after successful replacement. Stop active runs before updating.
+only after successful replacement. A verified default-home installation also
+retires recognizable executable bundles from the old ~/.x-cli-demio home, while
+preserving user state there. Stop active runs before updating.
 One top-level config.toml owns global settings, registry and [overlay] presenter
 preferences. There is no separate speaker preferences file. Each demo lives
 under demos/<name> with its own demo.json, scenarios, shared components and local
