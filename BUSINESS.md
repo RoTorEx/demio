@@ -201,3 +201,10 @@ endpoint, and generic AI-driven application control remain outside this first mi
 - `docs/contracts/adapter.md`: project-agent integration and protocol.
 - `examples/browser`: local browser walkthrough.
 - `scripts`, `.github/workflows`: packaging, installation, releases.
+
+## Local product usage evidence
+
+Record meaningful workflow outcomes locally, with bounded storage and no source
+content. [Usage logging](docs/usage-logging.md) owns the event and retention
+contract. Successful API calls, prepared artifacts and user-reported outcomes
+must not be presented as broader business success.

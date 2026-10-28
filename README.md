@@ -226,3 +226,8 @@ Apple Silicon bundle before publishing its archive, checksum, and installer.
 The project includes Vibecoding Kernel 1.3.5 under `.vibe/kernel`.
 
 MIT licensed.
+
+## Local usage logs
+
+See [usage logging](docs/usage-logging.md) for product events, privacy, paths,
+rotation and interpretation limits.

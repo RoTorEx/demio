@@ -4,6 +4,7 @@ mod protocol;
 mod registry;
 mod run;
 mod selector;
+mod usage;
 use anyhow::{Context, Result, bail};
 use registry::{Channel, Config, THEMES, config_path};
 use std::{
@@ -18,7 +19,16 @@ use std::{
 };
 const HELP: &str = "Demio — one remote for project demos\n\nUsage: demio [COMMAND]\n\n  list [--json]                 List demos/scenarios and creation times\n  register FILE [--replace]      Register a demo or scenario manifest\n  unregister ID                 Remove registry entry, preserve project files\n  validate FILE                 Validate demo/scenario without executing code\n  doctor ID                     Ask adapter for a read-only readiness check\n  run ID [--no-overlay] [--auto]  Run by exact scenario ID\n  init DIRECTORY                Scaffold a demo, scenarios and instructions\n  setup-config                  Create missing configuration\n  config                        Print configuration and path\n  themes                        List themes\n  theme NAME                    Set terminal theme\n  update                        Install latest verified release\n  help / --help                 Show this help\n  version / --version           Show version\n\nWithout a command: select a scenario interactively (list outside a terminal).\nF9 / Enter: next; F7: previous view; q / Ctrl+C: stop.\n";
 fn main() {
-    if let Err(error) = application() {
+    if let Ok(home) = registry::product_home() {
+        usage::init("demio", home.join("logs/demio.jsonl"));
+    }
+    let op = usage::Operation::start("command");
+    let result = application();
+    op.finish(
+        if result.is_ok() { "success" } else { "error" },
+        serde_json::json!({}),
+    );
+    if let Err(error) = result {
         eprintln!("Error: {error:#}");
         std::process::exit(1);
     }
@@ -31,6 +41,15 @@ fn argument<'a>(args: &'a [String], index: usize, usage: &str) -> Result<&'a str
 fn application() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let command = args.first().map(String::as_str).unwrap_or("");
+    usage::event(
+        "command_selected",
+        "started",
+        serde_json::json!({"mode":match command {
+            ""=>"default", "help"|"--help"|"-h"=>"help", "version"|"--version"|"-V"=>"version",
+            "list"|"register"|"unregister"|"validate"|"doctor"|"run"|"init"|"setup-config"|"config"|"themes"|"theme"|"update"=>command,
+            "--overlay-settings"=>"overlay_settings", _=>"unknown"
+        }}),
+    );
     if matches!(command, "help" | "--help" | "-h") {
         print!("{HELP}");
         return Ok(());

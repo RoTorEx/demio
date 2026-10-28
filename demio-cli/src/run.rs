@@ -1,6 +1,6 @@
 use crate::{
     protocol::{Event, Worker},
-    registry::{Channel, atomic_write, now, product_home},
+    registry::{Channel, atomic_write},
 };
 use anyhow::{Context, Result, bail};
 use crossterm::{
@@ -132,21 +132,19 @@ fn overlay(session: &Path, sender: mpsc::Sender<String>) -> Result<Overlay> {
     Ok(Overlay(child))
 }
 fn journal(channel: &Channel, position: &Position, status: &str) -> Result<()> {
-    let directory = product_home()?.join("logs");
-    fs::create_dir_all(&directory)?;
-    let path = directory.join("demio.jsonl");
-    // Bounded diagnostics only: no narration, parameters or adapter payloads.
-    if fs::metadata(&path).is_ok_and(|metadata| metadata.len() >= 1024 * 1024) {
-        fs::rename(&path, directory.join("demio.previous.jsonl"))?;
-    }
-    let data = serde_json::json!({"at":now(),"process_id":std::process::id(),"scenario_id":channel.id,"completed":position.completed,"view":position.view,"status":status});
-    let mut stream = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)?;
-    writeln!(stream, "{}", serde_json::to_string(&data)?)?;
+    crate::usage::event(
+        "scenario_progress",
+        match status {
+            "Error" | "PreparationError" => "error",
+            "Finished" => "success",
+            "Stopped" => "canceled",
+            _ => "observed",
+        },
+        serde_json::json!({"completed":position.completed,"total":channel.steps.len(),"status":status}),
+    );
     Ok(())
 }
+
 fn display(
     channel: &Channel,
     position: &Position,
@@ -215,6 +213,7 @@ pub fn run(
     no_overlay: bool,
     cancelled: Arc<AtomicBool>,
 ) -> Result<()> {
+    let operation = crate::usage::Operation::start("scenario_run");
     let mut channel = channel;
     channel.name = channel.display_name(&manifest);
     let scratch = Scratch::new()?;
@@ -254,6 +253,7 @@ pub fn run(
             &position,
             if result.is_ok() { "Finished" } else { "Error" },
         )?;
+        operation.finish(if result.is_ok(){"success"}else if cancelled.load(Ordering::Relaxed){"canceled"}else{"error"},serde_json::json!({"completed":position.completed,"total":channel.steps.len(),"scenario_id":channel.id,"mode":"auto"}));
         return result;
     }
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
@@ -394,6 +394,7 @@ pub fn run(
             "Stopped"
         },
     )?;
+    operation.finish(if failure.is_some(){"error"}else if position.completed==channel.steps.len(){"success"}else{"canceled"},serde_json::json!({"completed":position.completed,"total":channel.steps.len(),"scenario_id":channel.id,"mode":"interactive"}));
     if let Some(error) = failure {
         bail!("{error}");
     }

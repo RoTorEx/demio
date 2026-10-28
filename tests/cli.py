@@ -83,7 +83,8 @@ for line in sys.stdin:
     log=(root/'actions.log').read_text()
     assert log.count('run:one') == 1 and log.count('run:two') == 1
     events=[json.loads(line) for line in (root/'product/logs/demio.jsonl').read_text().splitlines()]
-    assert events[-1]['completed'] == 2 and events[-1]['scenario_id']=='z-demo'
+    completed = [e for e in events if e.get('action') == 'scenario_run' and e.get('result') == 'success']
+    assert completed and completed[-1]['fields']['completed'] == 2
     assert 'Read this' not in (root/'product/logs/demio.jsonl').read_text()
     # Exercise the actual interactive entrypoint, including backward navigation.
     (root/'actions.log').write_text('')
@@ -125,7 +126,7 @@ for line in sys.stdin:
     default_runtime=dict(env,TMPDIR=str(temporary));default_runtime.pop('DEMIO_RUNTIME_DIR',None)
     subprocess.run([binary,'run','z-demo','--auto'],check=True,env=default_runtime,capture_output=True,timeout=15)
     assert (root/'product/logs/demio.previous.jsonl').is_file()
-    assert json.loads(logfile.read_text().splitlines()[-1])['status']=='Finished'
+    assert any(e.get('action')=='scenario_run' and e.get('result')=='success' for e in map(json.loads,logfile.read_text().splitlines()))
     assert not list((temporary/'demio').iterdir())
     assert not (root/'product/state').exists() and not (root/'product/sessions').exists()
     changed=json.loads(alternate.read_text());changed['id']='changed';alternate.write_text(json.dumps(changed))
