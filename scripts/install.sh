@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 # All writes are staged until archive entries and both native versions pass.
-install_root=${DEMIO_INSTALL_DIR:-${DEMIO_HOME:-"$HOME/.x-product-demio"}}
+install_root=${DEMIO_INSTALL_DIR:-${DEMIO_HOME:-"$HOME/.toolbelt/demio"}}
 archive=
 version=
 path_update=1
@@ -85,7 +85,7 @@ if versions.is_dir() and not versions.is_symlink():
 (root/'demos').mkdir(exist_ok=True)
 (root/'logs').mkdir(exist_ok=True)
 # Import legacy preferences once, preserving the originals and custom configs.
-if root == pathlib.Path.home()/'.x-product-demio':
+if root == pathlib.Path.home()/'.toolbelt/demio':
     legacy = pathlib.Path(os.environ.get('XDG_CONFIG_HOME', pathlib.Path.home()/'.config'))/'demio'
     for name in ('config.toml', 'speaker-notes.json'):
         if not (root/name).exists() and (legacy/name).is_file():
@@ -98,7 +98,7 @@ subprocess.run([str(root/'bin/demio'), '--overlay-settings'],
                stdout=subprocess.DEVNULL, check=True)
 # The old default home is retired only after the replacement works. Preserve
 # any user state there; delete only recognizable executable bundles and links.
-if root == pathlib.Path.home()/'.x-product-demio':
+if root == pathlib.Path.home()/'.toolbelt/demio':
     legacy_root = pathlib.Path.home()/'.x-cli-demio'
     legacy_versions = legacy_root/'versions'
     allowed = {'demio', 'demio-overlay', 'demio-install.sh', 'VERSION', 'LICENSE'}

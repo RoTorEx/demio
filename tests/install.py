@@ -53,7 +53,7 @@ with tempfile.TemporaryDirectory(dir=base) as temporary:
     subprocess.run(default_command,check=True,env=default_env)
     assert not (retired/'bin').exists() and not (retired/'versions').exists()
     assert (retired/'user-state.txt').read_text()=='preserve'
-    managed=home/'.x-product-demio'
+    managed=home/'.toolbelt/demio'
     assert 'theme = "forest"' in (managed/'config.toml').read_text()
     assert not (managed/'speaker-notes.json').exists()
     import json

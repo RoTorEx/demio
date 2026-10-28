@@ -77,8 +77,8 @@ saved recording on the actual Mac before promising that the notes are hidden.
 
 ## Storage ownership
 
-Keep personal demos under ~/.x-product-demio/demos/<demo-name>. Global settings
-are in ~/.x-product-demio/config.toml; demo settings stay in demo.json inside the
+Keep personal demos under ~/.toolbelt/demio/demos/<demo-name>. Global settings
+are in ~/.toolbelt/demio/config.toml; demo settings stay in demo.json inside the
 demo folder. Product upgrades replace bin only. Keep application checkout paths
 in demo parameters rather than deriving them from this folder's parent count,
 so moving a demo preserves its target. Do not put private demo data in the public

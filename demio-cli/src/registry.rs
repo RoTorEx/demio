@@ -178,7 +178,7 @@ pub fn home() -> Result<PathBuf> {
 pub fn product_home() -> Result<PathBuf> {
     Ok(std::env::var_os("DEMIO_HOME")
         .map(PathBuf::from)
-        .unwrap_or(home()?.join(".x-product-demio")))
+        .unwrap_or(home()?.join(".toolbelt/demio")))
 }
 pub fn config_path() -> Result<PathBuf> {
     if let Some(path) = std::env::var_os("DEMIO_CONFIG") {

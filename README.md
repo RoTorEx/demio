@@ -37,7 +37,7 @@ rm /tmp/demio-install.sh
 demio --version
 ```
 
-Installation uses `~/.x-product-demio/bin` and adds it to `.zshrc` once. Open a
+Installation uses `~/.toolbelt/demio/bin` and adds it to `.zshrc` once. Open a
 new terminal after installation. `demio update` verifies the archive checksum
 and both native versions, then replaces the current bundle. There is one
 installed version; updates preserve configuration, demos and logs. Stop active
@@ -45,7 +45,7 @@ demos before updating. Custom installations use `--install-dir PATH` and set
 `DEMIO_HOME=PATH` when launching.
 
 ```text
-~/.x-product-demio/
+~/.toolbelt/demio/
   config.toml           # Global theme and scenario registry
   bin/                  # Current demio + demio-overlay bundle only
   demos/
@@ -85,9 +85,9 @@ identity-graph/
 ```
 
 ```sh
-demio init ~/.x-product-demio/demos/my-demo
-demio validate ~/.x-product-demio/demos/my-demo/demo.json
-demio register ~/.x-product-demio/demos/my-demo/demo.json
+demio init ~/.toolbelt/demio/demos/my-demo
+demio validate ~/.toolbelt/demio/demos/my-demo/demo.json
+demio register ~/.toolbelt/demio/demos/my-demo/demo.json
 demio list
 demio
 ```
@@ -166,8 +166,8 @@ entry, requester/approver roles, submission, and approval. It makes no AI calls
 and changes no external services.
 
 ```sh
-demio init ~/.x-product-demio/demos/my-demo
-cd ~/.x-product-demio/demos/my-demo
+demio init ~/.toolbelt/demio/demos/my-demo
+cd ~/.toolbelt/demio/demos/my-demo
 python3 -m venv .venv
 .venv/bin/python -m pip install playwright==1.63.0
 PLAYWRIGHT_SKIP_BROWSER_GC=1 .venv/bin/python -m playwright install chromium
@@ -188,7 +188,7 @@ forest, sunset, ocean, midnight. Themes affect the terminal; the native window
 keeps the neutral glass appearance.
 
 Config: `$DEMIO_CONFIG`, otherwise `$DEMIO_HOME/config.toml`, defaulting to
-`~/.x-product-demio/config.toml`. The registry and theme live at the top level;
+`~/.toolbelt/demio/config.toml`. The registry and theme live at the top level;
 each demo's configuration remains in its own demo.json. DEMIO_HOME overrides the
 product home for isolated/custom installations. Explicit DEMIO_CONFIG selects the same file
 for the CLI and native presenter preferences. XDG config/state defaults are no longer used.

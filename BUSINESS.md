@@ -14,7 +14,7 @@ these boundaries.
 ## Installed home and storage
 
 The source repository owns product code, templates and public examples. The
-installed product home defaults to ~/.x-product-demio (DEMIO_HOME overrides it).
+installed product home defaults to ~/.toolbelt/demio (DEMIO_HOME overrides it).
 Its bin directory contains exactly one current CLI/overlay bundle; verified
 updates replace it and preserve data. Old same-root version bundles are removed
 only after successful replacement. A verified default-home installation also
