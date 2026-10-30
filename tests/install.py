@@ -66,6 +66,24 @@ with tempfile.TemporaryDirectory(dir=base) as temporary:
     assert not (managed/'speaker-notes.json').exists()
     assert (home/'.zshrc').read_text().count(str(managed/'bin'))==1
     assert '.x-cli-demio' not in (home/'.zshrc').read_text()
+    # Older machine layouts can link both retired names to the active home.
+    # Cleanup must not follow that chain and delete the newly installed bundle.
+    alias_home=root/'alias-home';alias_managed=alias_home/'.toolbelt/demio'
+    alias_managed.mkdir(parents=True)
+    (alias_managed/'config.toml').write_text('theme = "ocean"\n')
+    (alias_managed/'demos').mkdir();(alias_managed/'demos/keep.json').write_text('{}')
+    (alias_managed/'logs').mkdir();(alias_managed/'logs/keep.log').write_text('keep')
+    (alias_home/'.x-product-demio').symlink_to(alias_managed)
+    (alias_home/'.x-cli-demio').symlink_to(alias_home/'.x-product-demio')
+    alias_env=dict(default_env,HOME=str(alias_home))
+    for _ in range(2):
+        subprocess.run(default_command+['--no-path-update'],check=True,env=alias_env)
+        for executable in ('demio','demio-overlay'):
+            assert subprocess.check_output([str(alias_managed/'bin'/executable),'--version'],text=True).strip().split()[-1]==version.split()[-1]
+        assert (alias_managed/'config.toml').read_text()=='theme = "ocean"\n'
+        assert (alias_managed/'demos/keep.json').read_text()=='{}'
+        assert (alias_managed/'logs/keep.log').read_text()=='keep'
+        assert (alias_home/'.x-cli-demio').is_symlink() and (alias_home/'.x-product-demio').is_symlink()
     # Exercise update destination inference without fetching a release.
     legacy_bin=home/'.x-cli-demio/bin';shutil.copytree(managed/'bin',legacy_bin)
     stub='#!/bin/sh\nprintf "%s\\n" "$@" > "$(dirname "$0")/update-arguments"\n'
