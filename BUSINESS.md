@@ -2,7 +2,7 @@
 
 ## Product components
 
-Demio is a product under personal/apps/demio, comprising demio-cli and
+Demio is a product under personal/projects/dev-tools/demio, comprising demio-cli and
 demio-overlay. demio-cli owns the terminal entry point (`demio`), TUI, registry,
 adapter protocol, sequencing and process cleanup. demio-overlay owns the native
 macOS presenter window and global controls, with no project-action authority.

@@ -2,7 +2,7 @@
 
 Demio is a product with two components: **demio-cli** (Rust; public command
 `demio`) and **demio-overlay** (Swift/AppKit; the native presenter window).
-The checkout belongs under `personal/apps/demio`, with a shared version,
+The checkout belongs under `personal/projects/dev-tools/demio`, with a shared version,
 package, and release workflow for both components.
 
 ```text
