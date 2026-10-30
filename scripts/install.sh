@@ -107,7 +107,7 @@ if root == pathlib.Path.home()/'.toolbelt/demio':
                 and {p.name for p in path.iterdir()} == allowed
                 and all(p.is_file() and not p.is_symlink() for p in path.iterdir()))
     bundles = list(legacy_versions.iterdir()) if legacy_versions.is_dir() and not legacy_versions.is_symlink() else []
-    if all(owned_bundle(path) for path in bundles):
+    if legacy_root.resolve() != root.resolve() and all(owned_bundle(path) for path in bundles):
         legacy_bin = legacy_root/'bin'
         if legacy_bin.is_symlink() and legacy_bin.resolve() in bundles:
             legacy_bin.unlink()

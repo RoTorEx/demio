@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+- Preserve the active executable bundle when retired home paths are symlink aliases of the current Toolbelt installation.
+
 ## [0.1.9] - 2026-10-28
 
 - Toolbelt migration: use `~/.toolbelt/<name>` for custom installations and update project-path references where applicable.
