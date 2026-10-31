@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-10-31
+
 - Add bounded, metadata-only local product usage evidence; preserve business and recovery state.
 
 - Preserve the active executable bundle when retired home paths are symlink aliases of the current Toolbelt installation.
