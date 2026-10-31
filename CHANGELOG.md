@@ -1,10 +1,8 @@
 # Changelog
 
-## Unreleased
+## [Unreleased]
 
 - Add bounded, metadata-only local product usage evidence; preserve business and recovery state.
-
-## [Unreleased]
 
 - Preserve the active executable bundle when retired home paths are symlink aliases of the current Toolbelt installation.
 
