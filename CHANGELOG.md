@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-11-05
+
 - Define portable demo delivery, destination setup and fixture/runtime verification; distinguish source-only bundles from runnable transfers.
 
 ## [0.1.10] - 2026-10-31
