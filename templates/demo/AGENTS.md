@@ -83,3 +83,7 @@ demo folder. Product upgrades replace bin only. Keep application checkout paths
 in demo parameters rather than deriving them from this folder's parent count,
 so moving a demo preserves its target. Do not put private demo data in the public
 product repository. External project runtime data remains owned by that project.
+
+## Sharing this demo
+
+A transfer request includes destination setup and declared dependencies. Do not claim that copying these files makes application state portable. Avoid sender-specific home paths, personal account assumptions and mandatory unrelated tools. Preserve existing stopped-project restrictions without inventing state markers. Supply supported bootstrap and reviewed non-secret fixtures or mark affected scenarios incomplete. Use interactive destination sign-in; never ZIP source credentials, cookies or full Chrome profiles. Verify an extracted copy under a different path and isolated Demio config, then rehearse the promised flows; doctor alone is not proof.

@@ -208,3 +208,7 @@ Record meaningful workflow outcomes locally, with bounded storage and no source
 content. [Usage logging](docs/usage-logging.md) owns the event and retention
 contract. Successful API calls, prepared artifacts and user-reported outcomes
 must not be presented as broader business success.
+
+## Portable demo delivery
+
+When sharing a demo, the usable result includes declared dependencies, supported destination setup, non-secret fixture/runtime requirements, interactive account access and verification after relocation. Source-machine doctor success is not portability evidence. The [delivery contract](docs/portability.md) defines the boundary; project-specific data/bootstrap remain owned by the adapter/application, not inferred by the sequencing engine.

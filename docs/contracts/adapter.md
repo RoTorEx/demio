@@ -94,3 +94,7 @@ The macOS helper reads `panel.json` from the owned session directory and sends
 The combined presenter window contains Back/Next and the active step's `say`
 text and role, and retains user-adjusted position and size during the session.
 The window closes when the CLI exits. F7/F9 work globally; no F1 hide/show control exists.
+
+## Transfer to another machine
+
+Follow [portable demo delivery](../portability.md). Check and preparation must distinguish a missing dependency from an application failure and explain the supported recovery. Do not bind browser-only scenarios to an unrelated sender checkout, profile file or mandatory personal tool. Preserve applicable existing stop guards. Real retained-run presentations require a supported data/runtime bootstrap; source instructions alone cannot recreate that state.

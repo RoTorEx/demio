@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Define portable demo delivery, destination setup and fixture/runtime verification; distinguish source-only bundles from runnable transfers.
+
 ## [0.1.10] - 2026-10-31
 
 - Add bounded, metadata-only local product usage evidence; preserve business and recovery state.

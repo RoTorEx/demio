@@ -231,3 +231,7 @@ MIT licensed.
 
 See [usage logging](docs/usage-logging.md) for product events, privacy, paths,
 rotation and interpretation limits.
+
+## Sharing a demo
+
+Use the [portable delivery contract](docs/portability.md) before handing a demo to another machine. Copying manifests/adapters and passing doctor on the sender does not establish a reproducible destination setup.
