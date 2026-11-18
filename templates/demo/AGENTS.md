@@ -71,7 +71,8 @@ Arrow keys/j/k select; Enter starts the exact scenario; d starts a dry run. PgUp
 f reveals the scenario in Finder. q/Esc leaves the selector.
 
 During a demo, one floating window contains Back, Next and narration. The
-presenter reads aloud. F9/Enter advances; F7 previews a completed step. Back is
+presenter reads aloud. F9 advances; F7 previews a completed step; after an error,
+F9 skips the failed step without running it again. Back is
 viewing, not undo. A dry run (`demio run ID --dry-run`, or d in the selector)
 walks the narration first and executes nothing. q/Ctrl+C in the terminal ends the session. Font size and
 alignment persist. Capture exclusion depends on the recorder: inspect a short

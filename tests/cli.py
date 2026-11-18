@@ -100,11 +100,11 @@ for line in sys.stdin:
         raise AssertionError((expected,received))
     try:
         wait_text('Press F9 to begin')
-        os.write(master,b'\r');wait_text('Step complete.')
-        os.write(master,b'\r');wait_text('Demo complete.')
+        os.write(master,b'\x1b[20~');wait_text('Step complete.')
+        os.write(master,b'\x1b[20~');wait_text('Demo complete.')
         os.write(master,b'\x1b[18~');wait_text('Viewing completed step')
         wait_text('Demo complete.')
-        os.write(master,b'\r');wait_text('Viewing completed step')
+        os.write(master,b'\x1b[20~');wait_text('Viewing completed step')
         wait_text('Demo complete.')
         os.write(master,b'q');interactive.wait(timeout=5)
         assert interactive.returncode==0
@@ -114,6 +114,10 @@ for line in sys.stdin:
     finally:
         if interactive.poll() is None: interactive.kill();interactive.wait()
         os.close(master)
+    # A step's wait tip is accepted and printed with the script.
+    tipped=manifest('tipped',['one']);data=json.loads(tipped.read_text());data['steps'][0]['wait']='the reply, because the next step uses it';tipped.write_text(json.dumps(data))
+    cli('validate',str(tipped));cli('register',str(tipped))
+    assert 'Wait: the reply, because the next step uses it' in cli('run','tipped','--dry-run').stdout
     # A dry run only reads narration and asks the adapter to rehearse (open windows).
     (root/'actions.log').write_text('')
     script=cli('run','z-demo','--dry-run').stdout
@@ -125,14 +129,34 @@ for line in sys.stdin:
     os.close(slave)
     try:
         wait_text('Press F9 to begin')
-        os.write(master,b'\r');wait_text('Speak, then press F9')
-        os.write(master,b'\r');wait_text('Speak, then press F9')
-        os.write(master,b'\r');wait_text('End of the scenario')
+        os.write(master,b'\x1b[20~');wait_text('Speak, then press F9')
+        os.write(master,b'\x1b[20~');wait_text('Speak, then press F9')
+        os.write(master,b'\x1b[20~');wait_text('End of the scenario')
         os.write(master,b'\x1b[18~');wait_text('1/2')
         os.write(master,b'q');interactive.wait(timeout=5)
         assert interactive.returncode==0
         actions=(root/'actions.log').read_text().split()
         assert actions==['rehearse:None','rehearse:one','rehearse:two','rehearse:one','cleanup:None'],actions
+    finally:
+        if interactive.poll() is None: interactive.kill();interactive.wait()
+        os.close(master)
+    # Enter no longer advances; after a failed step, F9 skips it without running it again.
+    cli('register',str(manifest('skip',['fail','after'])))
+    (root/'actions.log').write_text('')
+    master, slave = pty.openpty()
+    interactive = subprocess.Popen([binary,'run','skip','--no-overlay'],stdin=slave,stdout=slave,stderr=slave,env=dict(env,TERM='xterm-256color'))
+    os.close(slave)
+    try:
+        wait_text('Press F9 to begin')
+        os.write(master,b'\r');time.sleep(.5)
+        assert (root/'actions.log').read_text().count('run:')==0,'Enter must not advance a run'
+        os.write(master,b'\x1b[20~');wait_text('press F9 to skip it')
+        os.write(master,b'\x1b[20~');wait_text('Skipped the failed step')
+        os.write(master,b'\x1b[20~');wait_text('Demo complete.')
+        os.write(master,b'q');interactive.wait(timeout=5)
+        assert interactive.returncode==0
+        actions=(root/'actions.log').read_text()
+        assert actions.count('run:fail')==1 and actions.count('run:after')==1,actions
     finally:
         if interactive.poll() is None: interactive.kill();interactive.wait()
         os.close(master)

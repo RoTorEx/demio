@@ -16,6 +16,9 @@ pub struct Step {
     pub title: String,
     pub role: String,
     pub say: String,
+    /// What to wait for before pressing F9, and why. Shown in red; optional.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub wait: String,
     #[serde(default = "step_timeout")]
     pub timeout_seconds: u64,
 }

@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- Add an optional step `wait`: what to wait for before pressing F9, and why. It shows
+  in red in the presenter window and the terminal, and in a printed dry run.
+
+- Only F9/F7 and the presenter window's buttons move through a run; Enter no longer
+  advances. A failed step stays on screen with its error, and F9 or Next skips it
+  without running it again once the presenter has done it by hand.
+
 ## [0.1.14] - 2026-11-18
 
 - Stop the presenter window's buttons from taking keyboard focus. With macOS keyboard

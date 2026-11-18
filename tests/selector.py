@@ -104,7 +104,7 @@ for line in sys.stdin:
         process.send_signal(signal.SIGWINCH)
         os.write(master, b'\x1b[6~\x1b[5~j\r')
         wait_text(master, 'Press F9 to begin')
-        os.write(master, b'\r')
+        os.write(master, b'\x1b[20~')
         wait_text(master, 'Demo complete.')
         os.write(master, b'q')
         assert wait_exit(process, master) == 0

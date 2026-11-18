@@ -141,7 +141,9 @@ Global F7/F9 are available while the helper is alive; there is no hide toggle.
 
 Next executes the next uncompleted step once. Back and forward navigation through
 completed steps invoke read-only preview. They neither undo nor repeat writes.
-An adapter error blocks further actions in that session. Timeouts leave outcomes
+An adapter error stops automatic progress: the failed step stays on screen with
+its error, and only the presenter's F9 or Next skips it, without running it again,
+after doing it by hand. Only F9/F7 and the window's buttons navigate. Timeouts leave outcomes
 unknown, with no automatic retry. A new run is a new environment, not a resume.
 Project adapters must make preparation safe for repeated fresh runs.
 

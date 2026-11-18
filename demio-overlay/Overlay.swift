@@ -13,6 +13,7 @@ func send(_ command: String) { print(command); fflush(stdout) }
 final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var notes: NSPanel!
     var back: NSButton!
+    var waitRange: NSRange?
     var next: NSButton!
     let cue = NSTextView()
     let title = NSTextField(labelWithString: "Ready")
@@ -59,6 +60,9 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
         cue.defaultParagraphStyle = paragraph
         cue.typingAttributes = attributes
         cue.textStorage?.setAttributes(attributes, range: NSRange(location: 0, length: (cue.string as NSString).length))
+        if let tip = waitRange, NSMaxRange(tip) <= (cue.string as NSString).length {
+            cue.textStorage?.addAttribute(.foregroundColor, value: NSColor.systemRed, range: tip)
+        }
         fontLabel.stringValue = "\(Int(fontSize)) pt"
         smaller?.isEnabled = fontSize > 14
         larger?.isEnabled = fontSize < 48
@@ -187,17 +191,23 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard fontSize == 30, textAlignment == .right else { exit(8) }
         alignmentPicker.selectedSegment = 0; changeAlignment()
         let retainedFrame = notes.frame
-        for status in ["Working", "Failed", "Ready", "Dry run"] {
+        for status in ["Working", "Failed", "Error", "Ready", "Dry run"] {
             let state = ["status": status, "channel": "Native check", "step": "3/5", "role": "Approver", "title": "Updated step", "say": "Updated narration stays with the controls."]
             guard let data = try? JSONSerialization.data(withJSONObject: state) else { exit(13) }
             do { try data.write(to: session.appendingPathComponent("panel.json")) } catch { exit(13) }
             refresh()
             let idle = status == "Ready" || status == "Dry run"
-            guard back.isEnabled == idle, next.isEnabled == idle,
+            guard back.isEnabled == idle, next.isEnabled == (idle || status == "Error"),
                   cue.string.contains("Updated narration"), cue.font?.pointSize == fontSize,
                   notes.frame == retainedFrame else { exit(13) }
         }
         guard [back!, next!, smaller!, larger!, alignmentPicker!].allSatisfy({ $0.refusesFirstResponder }) else { exit(14) }
+        let tipState = ["status": "Ready", "channel": "Native check", "step": "4/5", "role": "Presenter", "title": "Tip", "say": "Narration.", "wait": "Copilot's reply"]
+        guard let tipData = try? JSONSerialization.data(withJSONObject: tipState) else { exit(15) }
+        do { try tipData.write(to: session.appendingPathComponent("panel.json")) } catch { exit(15) }
+        refresh()
+        guard let tip = waitRange, cue.string.hasSuffix("Wait: Copilot's reply"),
+              cue.textStorage?.attribute(.foregroundColor, at: tip.location, effectiveRange: nil) as? NSColor == NSColor.systemRed else { exit(15) }
         back.performClick(nil); next.performClick(nil)
         for (name, window) in [("presenter", notes!)] {
             if let view = window.contentView, let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
@@ -219,7 +229,14 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
         last = data
         title.stringValue = "\(state["status"] ?? "Ready") · \(state["step"] ?? "") · \(state["role"] ?? "")"
         notes.title = "Demio · \(state["channel"] ?? "Speaker notes")"
-        let content = "\(state["title"] ?? "")\n\n\(state["say"] ?? "")"
+        var content = "\(state["title"] ?? "")\n\n\(state["say"] ?? "")"
+        waitRange = nil
+        if let wait = state["wait"], !wait.isEmpty {
+            let tip = "Wait: \(wait)"
+            content += "\n\n"
+            waitRange = NSRange(location: (content as NSString).length, length: (tip as NSString).length)
+            content += tip
+        }
         if cue.string != content {
             cue.string = content
             applyTextStyle()
@@ -228,7 +245,8 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Ignore repeated button presses while an operation is in flight. A dry run never has one.
         let idle = ["Ready", "Dry run"].contains(state["status"] ?? "")
         back.isEnabled = idle
-        next.isEnabled = idle
+        // After an error, Next skips the failed step once the presenter has done it by hand.
+        next.isEnabled = idle || state["status"] == "Error"
     }
     func installKeys() {
         let callback: EventHandlerUPP = { _, event, pointer in

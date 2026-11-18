@@ -142,12 +142,15 @@ migrate automatically on install or the next CLI/window launch. A pre-existing
 Malformed legacy JSON is preserved with a warning for manual recovery.
 
 F9 advances; F7 previews the previous completed step. Depending on your keyboard
-settings, use Fn+F9 / Fn+F7. In the terminal, Enter advances and q / Ctrl+C exits.
+settings, use Fn+F9 / Fn+F7. Only these keys and the window's buttons move through
+a run; Enter doesn't. In the terminal, q / Ctrl+C exits.
 There is no hide/show button or F1 toggle. Exit from the terminal to close the
 window and clean up the session. Use `--no-overlay` for terminal controls only.
 
 Back is a **view**, not undo. Moving forward through completed steps previews
-without repeating writes. Next is blocked while working or after an error.
+without repeating writes. Next is blocked while working. After an error the
+failed step stays on screen; do it by hand, then F9 or Next skips it without
+running it again.
 Timeouts report an unknown outcome and never trigger automatic retries.
 
 ### Dry run

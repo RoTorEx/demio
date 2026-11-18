@@ -55,8 +55,12 @@ struct Display<'a> {
     title: &'a str,
     role: &'a str,
     say: &'a str,
+    wait: &'a str,
     detail: &'a str,
 }
+/// Red marks a step's wait tip; `paint` restores the theme colour after it.
+const RED: &str = "\x1b[1;31m";
+const RESET: &str = "\x1b[0m";
 struct Screen;
 impl Screen {
     fn enter() -> Result<Self> {
@@ -166,11 +170,20 @@ fn display(
         title: &step.title,
         role: &step.role,
         say: &step.say,
+        wait: &step.wait,
         detail,
     };
     atomic_write(&session.join("panel.json"), &serde_json::to_vec(&display)?)?;
+    let wait = if display.wait.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "{RED}Wait: {}{RESET}\r\n\r\n",
+            display.wait.replace('\n', "\r\n")
+        )
+    };
     Ok(format!(
-        "Demio — {} [{}]\r\n\r\n{}  ·  {}  ·  {}\r\n{}\r\n\r\n{}\r\n\r\n{}\r\n\r\nF9 / Enter  Next    F7  Previous view    q / Ctrl+C  Quit\r\nPrevious view never repeats or undoes a completed action.\r\n",
+        "Demio — {} [{}]\r\n\r\n{}  ·  {}  ·  {}\r\n{}\r\n\r\n{}\r\n\r\n{wait}{}\r\n\r\nF9  Next    F7  Previous view    q / Ctrl+C  Quit\r\nPrevious view never repeats or undoes a completed action.\r\n",
         channel.name,
         channel.id,
         display.status,
@@ -191,7 +204,8 @@ fn paint(text: &str, theme: &str) -> Result<()> {
         _ => 36,
     };
     execute!(io::stdout(), cursor::MoveTo(0, 0), Clear(ClearType::All))?;
-    print!("\x1b[{color}m{text}\x1b[0m");
+    let text = text.replace(RESET, &format!("{RESET}\x1b[{color}m"));
+    print!("\x1b[{color}m{text}{RESET}");
     io::stdout().flush()?;
     Ok(())
 }
@@ -217,7 +231,8 @@ fn key_input(panel: Option<String>) -> Result<Option<String>> {
         if let TerminalEvent::Key(key) = event::read()? {
             if key.kind == KeyEventKind::Press {
                 let typed = match key.code {
-                    KeyCode::F(9) | KeyCode::Enter => Some("next"),
+                    // Only F9/F7 and the window's buttons navigate; a stray Enter must not.
+                    KeyCode::F(9) => Some("next"),
                     KeyCode::F(7) => Some("previous"),
                     KeyCode::Char('q') | KeyCode::Esc => Some("quit"),
                     KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -266,6 +281,9 @@ fn dry_run(
                 step.title,
                 step.say
             );
+            if !step.wait.is_empty() {
+                println!("Wait: {}\n", step.wait);
+            }
         }
         operation.finish(
             "success",
@@ -453,6 +471,8 @@ pub fn run(
     let screen = Screen::enter()?;
     let mut pending: Option<(usize, bool)> = None;
     let mut failure = None;
+    // The step whose run failed. It stays on screen; F9 skips it once the presenter has done it by hand.
+    let mut failed: Option<usize> = None;
     let mut detail = "Press F9 to begin".to_owned();
     let mut drawn = String::new();
     let deadline = Instant::now() + Duration::from_secs(channel.session_seconds);
@@ -480,7 +500,14 @@ pub fn run(
                             }
                             Err(error) => {
                                 failure = Some(error.to_string());
-                                detail = error.to_string();
+                                if execute {
+                                    failed = Some(index);
+                                    detail = format!(
+                                        "{error}\r\nDo this step by hand, then press F9 to skip it; it won't run again. q stops."
+                                    );
+                                } else {
+                                    detail = error.to_string();
+                                }
                             }
                         }
                         journal(
@@ -502,7 +529,7 @@ pub fn run(
         let text = display(
             &channel,
             &position,
-            pending.map(|v| v.0),
+            pending.map(|v| v.0).or(failed),
             status,
             &detail,
             &scratch.0,
@@ -514,6 +541,19 @@ pub fn run(
         let input = key_input(input_rx.try_recv().ok())?;
         match input.as_deref() {
             Some("quit") => break,
+            Some("next") if pending.is_none() && failed.is_some() => {
+                if let Some(index) = failed.take() {
+                    position.finish(index, true);
+                    failure = None;
+                    detail = if position.completed == channel.steps.len() {
+                        "Skipped the failed step without running it again. Demo complete.".into()
+                    } else {
+                        "Skipped the failed step without running it again. Speak, then press F9."
+                            .into()
+                    };
+                    journal(&channel, &position, "Skipped")?;
+                }
+            }
             Some("next") if pending.is_none() && failure.is_none() => {
                 if let Some((index, execute)) = position.next(channel.steps.len()) {
                     worker.send(

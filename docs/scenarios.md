@@ -87,6 +87,7 @@ overrides resolve beside that scenario file. Commands execute in that workspace.
 | `steps[].title` | The step's human-readable heading. |
 | `steps[].role` | The role displayed to the presenter; it does not switch application accounts itself. |
 | `steps[].say` | Text the presenter reads aloud. It does not execute actions or synthesize speech. |
+| `steps[].wait` | Optional. What to wait for before pressing F9, and why, such as a slow reply the next step depends on. Shown in red. |
 | `steps[].timeout_seconds` | Optional per-operation timeout: 1–3,600 seconds, default 120. |
 | `session_seconds` | Session time limit: 1–86,400 seconds, default 7,200. |
 | `workspace` | Optional override relative to this scenario; otherwise inherit the demo workspace. |

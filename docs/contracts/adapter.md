@@ -36,8 +36,8 @@ timestamps are stable. Step IDs must match adapter operations. Shared code
 belongs in shared/ or the demo's established common location; do not duplicate
 adapters merely for narration or route differences.
 
-Each step supplies id, title, role, say, and optional timeout_seconds (120 by
-default). Session seconds default to 7200. Narration is spoken by the presenter;
+Each step supplies id, title, role, say, and optional wait (what to wait for
+before pressing F9, and why; shown in red) and timeout_seconds (120 by default). Session seconds default to 7200. Narration is spoken by the presenter;
 role labels do not switch application accounts. Neither registration nor doctor
 proves that product actions are safe or successful. Verify visible results and
 appropriate failure boundaries. Never infer credentials, write permission or a
