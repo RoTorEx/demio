@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.16] - 2026-11-18
+
 - Default the presenter notes to 14 points, so a step's narration and wait tip fit
   without scrolling. A saved font size is kept.
 
