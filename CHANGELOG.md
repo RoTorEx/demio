@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.12] - 2026-11-18
+
 - Add dry runs (`demio run ID --dry-run`, or d in the selector): walk every step's
   narration with F9/F7 before a real run without preparing or executing anything.
   Adapters may answer the new read-only `rehearse` operation to open the step's
