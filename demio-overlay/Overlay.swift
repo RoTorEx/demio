@@ -136,6 +136,9 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
         alignmentPicker = NSSegmentedControl(labels: ["Left", "Center", "Right"], trackingMode: .selectOne, target: self, action: #selector(changeAlignment))
         alignmentPicker.selectedSegment = textAlignment == .center ? 1 : textAlignment == .right ? 2 : 0
         for view in [smaller!, fontLabel, larger!, alignmentPicker!] { controls.addArrangedSubview(view) }
+        // With macOS keyboard navigation on, the first button (Back) would hold focus and Space would
+        // send the presenter back a step. Only clicks and F7/F9 may navigate.
+        for control in [back!, next!, smaller!, larger!, alignmentPicker!] as [NSControl] { control.refusesFirstResponder = true }
         body.addArrangedSubview(title); body.addArrangedSubview(controls); body.addArrangedSubview(scroll); body.addArrangedSubview(row)
         notes.contentView!.addSubview(body)
         NSLayoutConstraint.activate([body.leadingAnchor.constraint(equalTo: notes.contentView!.leadingAnchor, constant: 15), body.trailingAnchor.constraint(equalTo: notes.contentView!.trailingAnchor, constant: -15), body.topAnchor.constraint(equalTo: notes.contentView!.topAnchor, constant: 12), body.bottomAnchor.constraint(equalTo: notes.contentView!.bottomAnchor, constant: -12), scroll.widthAnchor.constraint(equalTo: body.widthAnchor), row.widthAnchor.constraint(equalTo: body.widthAnchor), scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 60)])
@@ -194,6 +197,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
                   cue.string.contains("Updated narration"), cue.font?.pointSize == fontSize,
                   notes.frame == retainedFrame else { exit(13) }
         }
+        guard [back!, next!, smaller!, larger!, alignmentPicker!].allSatisfy({ $0.refusesFirstResponder }) else { exit(14) }
         back.performClick(nil); next.performClick(nil)
         for (name, window) in [("presenter", notes!)] {
             if let view = window.contentView, let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {

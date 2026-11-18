@@ -208,24 +208,38 @@ pub fn doctor(channel: &Channel, manifest: &Path, cancelled: &AtomicBool) -> Res
 /// How long an adapter may take to answer the first rehearse before the dry run
 /// continues as narration only.
 const REHEARSE_PROBE_SECONDS: u64 = 30;
-fn key_input(fallback: Option<String>) -> Result<Option<String>> {
-    if !event::poll(Duration::from_millis(100))? {
-        return Ok(fallback);
-    }
-    if let TerminalEvent::Key(key) = event::read()? {
-        if key.kind == KeyEventKind::Press {
-            return Ok(match key.code {
-                KeyCode::F(9) | KeyCode::Enter => Some("next".into()),
-                KeyCode::F(7) => Some("previous".into()),
-                KeyCode::Char('q') | KeyCode::Esc => Some("quit".into()),
-                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    Some("quit".into())
+/// The next navigation command: a terminal key, else what the presenter window sent.
+/// Each one is logged with its source (never narration) so an unexpected step can be traced.
+fn key_input(panel: Option<String>) -> Result<Option<String>> {
+    let mut input = panel;
+    let mut source = "panel";
+    if event::poll(Duration::from_millis(100))? {
+        if let TerminalEvent::Key(key) = event::read()? {
+            if key.kind == KeyEventKind::Press {
+                let typed = match key.code {
+                    KeyCode::F(9) | KeyCode::Enter => Some("next"),
+                    KeyCode::F(7) => Some("previous"),
+                    KeyCode::Char('q') | KeyCode::Esc => Some("quit"),
+                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        Some("quit")
+                    }
+                    _ => None,
+                };
+                if let Some(command) = typed {
+                    input = Some(command.into());
+                    source = "terminal";
                 }
-                _ => fallback,
-            });
+            }
         }
     }
-    Ok(fallback)
+    if let Some(command) = &input {
+        crate::usage::event(
+            "navigation",
+            "observed",
+            serde_json::json!({"command":command,"source":source}),
+        );
+    }
+    Ok(input)
 }
 /// Walk a scenario's narration without preparing or running anything. The
 /// adapter, when it answers `rehearse`, may only open or focus windows.

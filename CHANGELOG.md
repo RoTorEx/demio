@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Stop the presenter window's buttons from taking keyboard focus. With macOS keyboard
+  navigation on, Back held focus and Space sent the presenter back a step mid-demo.
+  Each Next/Back is now logged with its source (window or terminal) for diagnosis.
+
 ## [0.1.13] - 2026-11-18
 
 - Enable the presenter window's Back and Next buttons during a dry run; they stayed
