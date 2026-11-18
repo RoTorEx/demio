@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.15] - 2026-11-18
+
 - Add an optional step `wait`: what to wait for before pressing F9, and why. It shows
   in red in the presenter window and the terminal, and in a printed dry run.
 
