@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.14] - 2026-11-18
+
 - Stop the presenter window's buttons from taking keyboard focus. With macOS keyboard
   navigation on, Back held focus and Space sent the presenter back a step mid-demo.
   Each Next/Back is now logged with its source (window or terminal) for diagnosis.
