@@ -119,13 +119,14 @@ Removing or reordering a step can break the state needed by later steps.
 ## Adapter responsibilities
 
 The adapter is a long-lived process. Demio sends JSON-line requests for `check`,
-`prepare`, `run`, `preview`, and `cleanup`. The adapter owns application actions,
+`prepare`, `run`, `preview`, `rehearse`, and `cleanup`. The adapter owns application actions,
 account switching, dependency checks, and visible-result verification. The
 `step` value matches `steps[].id`. Only a successful `done` response completes a
 step. Keep stdout for protocol JSON; send diagnostics to stderr.
 
 `preview` must remain read-only: Back previews a completed step without undoing
-or repeating its writes. Timeouts never trigger automatic retries. A fresh run
+or repeating its writes. `rehearse` serves dry runs: it may open or focus the
+windows a step uses, and nothing else. Timeouts never trigger automatic retries. A fresh run
 starts a fresh environment; setup and cleanup belong to the adapter.
 
 See [the adapter contract](contracts/adapter.md) for request and reply examples.
@@ -140,7 +141,8 @@ demio run your-scenario-id
 
 `validate` checks the manifest and workspace without executing adapter code.
 `doctor` invokes the adapter's read-only dependency/environment check. A manual
-rehearsal checks actual application behavior. Avoid `--auto` unless running all
+rehearsal checks actual application behavior. `demio run ID --dry-run` walks the
+narration first without executing anything. Avoid `--auto` unless running all
 steps and their effects is intended.
 
 Changes to the same manifest are loaded on the next run; registration need not

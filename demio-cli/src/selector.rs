@@ -437,14 +437,15 @@ fn draw(
     }
     frame.render_widget(
         Paragraph::new(format!(
-            "↑/↓ or j/k Select · Enter Run · PgUp/PgDn Details · q/Esc Quit\ne VS Code · f Finder   {message}"
+            "↑/↓ or j/k Select · Enter Run · d Dry run · PgUp/PgDn Details · q/Esc Quit\ne VS Code · f Finder   {message}"
         ))
         .style(Style::default().fg(Color::Gray)),
         regions[1],
     );
 }
 
-pub fn choose(config: &Config, cancelled: &AtomicBool) -> Result<Option<String>> {
+/// The selected scenario ID, and whether it should start as a dry run.
+pub fn choose(config: &Config, cancelled: &AtomicBool) -> Result<Option<(String, bool)>> {
     let entries = grouped(config.listing());
     let mut state = TableState::default();
     state.select((!entries.is_empty()).then(|| selected_row(&entries, 0)));
@@ -507,9 +508,14 @@ pub fn choose(config: &Config, cancelled: &AtomicBool) -> Result<Option<String>>
                         Err(error) => format!("Cannot open: {error:#}"),
                     };
                 }
-                KeyCode::Enter if !entries.is_empty() => {
+                KeyCode::Enter | KeyCode::Char('d') if !entries.is_empty() => {
                     match config.resolve(&entries[selected].id) {
-                        Ok(_) => return Ok(Some(entries[selected].id.clone())),
+                        Ok(_) => {
+                            return Ok(Some((
+                                entries[selected].id.clone(),
+                                key.code == KeyCode::Char('d'),
+                            )));
+                        }
                         Err(error) => message = format!("Cannot run: {error}"),
                     }
                 }

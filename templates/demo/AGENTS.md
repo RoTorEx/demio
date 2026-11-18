@@ -52,7 +52,8 @@ an environment. A working doctor command is not proof that a demo succeeded.
    scenario workspace overrides resolve beside that scenario's file.
 3. Share adapter components. Read DEMIO_PARAMETERS (a JSON object) for effective
    merged defaults/overrides, and DEMIO_SCENARIO for the selected manifest path.
-4. Implement check, prepare, run, preview and cleanup. Keep stdout JSON-only and
+4. Implement check, prepare, run, preview and cleanup, and rehearse when a dry
+   run should open the step's windows (read-only, never a write). Keep stdout JSON-only and
    logs on stderr. Report success only after the expected visible result is
    verified. Back/preview must not repeat writes. Timeouts have no automatic retry.
 5. Run demio validate demo.json, register the demo, and doctor each scenario.
@@ -65,13 +66,14 @@ an environment. A working doctor command is not proof that a demo succeeded.
 
 Run `demio`. Scenarios are grouped under their owning demo in the left pane;
 the right pane describes demo-wide components and the selected scenario.
-Arrow keys/j/k select; Enter starts the exact scenario. PgUp/PgDn scroll details
+Arrow keys/j/k select; Enter starts the exact scenario; d starts a dry run. PgUp/PgDn scroll details
 (on a MacBook, Fn+Up/Fn+Down). e opens the demo folder and selected JSON in VS Code;
 f reveals the scenario in Finder. q/Esc leaves the selector.
 
 During a demo, one floating window contains Back, Next and narration. The
 presenter reads aloud. F9/Enter advances; F7 previews a completed step. Back is
-viewing, not undo. q/Ctrl+C in the terminal ends the session. Font size and
+viewing, not undo. A dry run (`demio run ID --dry-run`, or d in the selector)
+walks the narration first and executes nothing. q/Ctrl+C in the terminal ends the session. Font size and
 alignment persist. Capture exclusion depends on the recorder: inspect a short
 saved recording on the actual Mac before promising that the notes are hidden.
 

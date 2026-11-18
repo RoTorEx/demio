@@ -205,17 +205,179 @@ pub fn doctor(channel: &Channel, manifest: &Path, cancelled: &AtomicBool) -> Res
     println!("Ready: {} [{}]", channel.name, channel.id);
     Ok(())
 }
+/// How long an adapter may take to answer the first rehearse before the dry run
+/// continues as narration only.
+const REHEARSE_PROBE_SECONDS: u64 = 30;
+fn key_input(fallback: Option<String>) -> Result<Option<String>> {
+    if !event::poll(Duration::from_millis(100))? {
+        return Ok(fallback);
+    }
+    if let TerminalEvent::Key(key) = event::read()? {
+        if key.kind == KeyEventKind::Press {
+            return Ok(match key.code {
+                KeyCode::F(9) | KeyCode::Enter => Some("next".into()),
+                KeyCode::F(7) => Some("previous".into()),
+                KeyCode::Char('q') | KeyCode::Esc => Some("quit".into()),
+                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    Some("quit".into())
+                }
+                _ => fallback,
+            });
+        }
+    }
+    Ok(fallback)
+}
+/// Walk a scenario's narration without preparing or running anything. The
+/// adapter, when it answers `rehearse`, may only open or focus windows.
+fn dry_run(
+    channel: Channel,
+    manifest: PathBuf,
+    theme: &str,
+    no_overlay: bool,
+    cancelled: Arc<AtomicBool>,
+    operation: crate::usage::Operation,
+) -> Result<()> {
+    let total = channel.steps.len();
+    if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+        println!(
+            "Dry run: {} [{}]. Nothing is executed.\n",
+            channel.name, channel.id
+        );
+        for (index, step) in channel.steps.iter().enumerate() {
+            println!(
+                "{}/{}  {}  {}\n{}\n",
+                index + 1,
+                total,
+                step.role,
+                step.title,
+                step.say
+            );
+        }
+        operation.finish(
+            "success",
+            serde_json::json!({"completed":0,"total":total,"scenario_id":channel.id,"mode":"dry_run"}),
+        );
+        return Ok(());
+    }
+    let scratch = Scratch::new()?;
+    let worker = Worker::start(&channel, &manifest, &scratch.0).ok();
+    let mut windows = false;
+    if let Some(worker) = &worker {
+        println!("Opening windows for a dry run of {}…", channel.name);
+        worker.send("rehearse", None, REHEARSE_PROBE_SECONDS)?;
+        windows = worker.wait(&cancelled).is_ok();
+    }
+    let ready = "Dry run: nothing is executed. Speak, then press F9.";
+    let mut detail = if windows {
+        "Dry run: nothing is executed. Press F9 to begin."
+    } else {
+        "Dry run, narration only: the adapter opened no windows. Press F9 to begin."
+    }
+    .to_owned();
+    let (input_tx, input_rx) = mpsc::channel();
+    let mut view: Option<usize> = None;
+    display(
+        &channel,
+        &Position::default(),
+        None,
+        "Dry run",
+        &detail,
+        &scratch.0,
+    )?;
+    let panel = if no_overlay {
+        None
+    } else {
+        Some(overlay(&scratch.0, input_tx)?)
+    };
+    let screen = Screen::enter()?;
+    let mut pending = false;
+    let mut drawn = String::new();
+    let mut furthest = 0;
+    loop {
+        if cancelled.load(Ordering::Relaxed) {
+            break;
+        }
+        if let Some(worker) = &worker {
+            while let Ok(event) = worker.events.try_recv() {
+                match event {
+                    Event::Progress(message) => detail = message,
+                    Event::Done(result) => {
+                        pending = false;
+                        detail = match result {
+                            Ok(_) => ready.into(),
+                            Err(error) => {
+                                format!("Window not opened: {error}. Nothing is executed.")
+                            }
+                        };
+                    }
+                }
+            }
+        }
+        let position = Position { completed: 0, view };
+        let text = display(&channel, &position, None, "Dry run", &detail, &scratch.0)?;
+        if text != drawn {
+            paint(&text, theme)?;
+            drawn = text;
+        }
+        let target = match key_input(input_rx.try_recv().ok())?.as_deref() {
+            Some("quit") => break,
+            Some("next") if !pending => match view.map_or(0, |v| v + 1) {
+                index if index < total => Some(index),
+                _ => {
+                    detail = "End of the scenario. F7 goes back; q quits.".into();
+                    None
+                }
+            },
+            Some("previous") if !pending => view.filter(|v| *v > 0).map(|v| v - 1),
+            _ => None,
+        };
+        if let Some(index) = target {
+            view = Some(index);
+            furthest = furthest.max(index + 1);
+            match &worker {
+                Some(worker) if windows => {
+                    worker.send(
+                        "rehearse",
+                        Some(&channel.steps[index].id),
+                        channel.steps[index].timeout_seconds,
+                    )?;
+                    pending = true;
+                    detail = "Opening windows…".into();
+                }
+                _ => detail = ready.into(),
+            }
+        }
+    }
+    drop(screen);
+    drop(panel);
+    if let Some(worker) = &worker {
+        worker.cleanup();
+    }
+    operation.finish(
+        if cancelled.load(Ordering::Relaxed) {
+            "canceled"
+        } else {
+            "success"
+        },
+        serde_json::json!({"completed":furthest,"total":total,"scenario_id":channel.id,"mode":"dry_run"}),
+    );
+    Ok(())
+}
 pub fn run(
     channel: Channel,
     manifest: PathBuf,
     theme: &str,
     auto: bool,
     no_overlay: bool,
+    dry: bool,
     cancelled: Arc<AtomicBool>,
 ) -> Result<()> {
     let operation = crate::usage::Operation::start("scenario_run");
     let mut channel = channel;
     channel.name = channel.display_name(&manifest);
+    if dry {
+        return dry_run(channel, manifest, theme, no_overlay, cancelled, operation);
+    }
     let scratch = Scratch::new()?;
     let worker = Worker::start(&channel, &manifest, &scratch.0)?;
     println!("Preparing {} [{}]…", channel.name, channel.id);
@@ -335,22 +497,7 @@ pub fn run(
             paint(&text, theme)?;
             drawn = text;
         }
-        let mut input = input_rx.try_recv().ok();
-        if event::poll(Duration::from_millis(100))? {
-            if let TerminalEvent::Key(key) = event::read()? {
-                if key.kind == KeyEventKind::Press {
-                    input = match key.code {
-                        KeyCode::F(9) | KeyCode::Enter => Some("next".into()),
-                        KeyCode::F(7) => Some("previous".into()),
-                        KeyCode::Char('q') | KeyCode::Esc => Some("quit".into()),
-                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            Some("quit".into())
-                        }
-                        _ => input,
-                    };
-                }
-            }
-        }
+        let input = key_input(input_rx.try_recv().ok())?;
         match input.as_deref() {
             Some("quit") => break,
             Some("next") if pending.is_none() && failure.is_none() => {

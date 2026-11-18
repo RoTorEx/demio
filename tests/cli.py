@@ -114,6 +114,28 @@ for line in sys.stdin:
     finally:
         if interactive.poll() is None: interactive.kill();interactive.wait()
         os.close(master)
+    # A dry run only reads narration and asks the adapter to rehearse (open windows).
+    (root/'actions.log').write_text('')
+    script=cli('run','z-demo','--dry-run').stdout
+    assert 'Nothing is executed' in script and script.count('Read this')==2,script
+    assert (root/'actions.log').read_text()=='',(root/'actions.log').read_text()
+    cli('run','z-demo','--dry-run','--auto',ok=False)
+    master, slave = pty.openpty()
+    interactive = subprocess.Popen([binary,'run','z-demo','--dry-run','--no-overlay'],stdin=slave,stdout=slave,stderr=slave,env=dict(env,TERM='xterm-256color'))
+    os.close(slave)
+    try:
+        wait_text('Press F9 to begin')
+        os.write(master,b'\r');wait_text('Speak, then press F9')
+        os.write(master,b'\r');wait_text('Speak, then press F9')
+        os.write(master,b'\r');wait_text('End of the scenario')
+        os.write(master,b'\x1b[18~');wait_text('1/2')
+        os.write(master,b'q');interactive.wait(timeout=5)
+        assert interactive.returncode==0
+        actions=(root/'actions.log').read_text().split()
+        assert actions==['rehearse:None','rehearse:one','rehearse:two','rehearse:one','cleanup:None'],actions
+    finally:
+        if interactive.poll() is None: interactive.kill();interactive.wait()
+        os.close(master)
     for failure in ['fail','timeout','wrong']:
         cli('register',str(manifest(failure,[failure,'never'])))
         result=cli('run',failure,'--auto',ok=False)
@@ -142,4 +164,4 @@ for line in sys.stdin:
     cli('init',str(root/'example'),ok=False)
     cli('theme','ocean');assert 'ocean *' in cli('themes').stdout
     cli('theme','unknown',ok=False)
-print('CLI: registration, replacement, exact IDs, validation, sequential actions, failure and timeout boundaries, cleanup, config preservation passed.')
+print('CLI: registration, replacement, exact IDs, validation, sequential actions, dry runs, failure and timeout boundaries, cleanup, config preservation passed.')

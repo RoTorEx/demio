@@ -145,6 +145,14 @@ An adapter error blocks further actions in that session. Timeouts leave outcomes
 unknown, with no automatic retry. A new run is a new environment, not a resume.
 Project adapters must make preparation safe for repeated fresh runs.
 
+A dry run lets the presenter learn the narration before a real run without
+changing anything. It never sends `prepare`, `run` or `preview`. Demio asks the
+adapter to `rehearse` once (30 seconds, long enough for a browser to open) and
+then per step; an adapter that refuses or times out leaves the dry run as
+narration only, and a failed step rehearse is shown, not fatal. F9 and F7 move
+freely in both directions because nothing is completed. A dry run and `--auto`
+are mutually exclusive.
+
 ## Limits and ownership
 
 The first minor supports macOS 14+ Apple Silicon, matching the owner's machine;
@@ -171,8 +179,8 @@ registry tests protect these contracts.
 
 ## Boundaries
 
-Adapters are trusted local executable code, not a sandbox. Their check and preview
-operations must be read-only. Preparation, browser scrolling/highlighting, writes,
+Adapters are trusted local executable code, not a sandbox. Their check, preview and
+rehearse operations must be read-only. Preparation, browser scrolling/highlighting, writes,
 verification, credentials, budget enforcement, and cleanup belong to the project
 adapter. It must keep owned children in its process group and must not daemonize.
 Demio terminates that group and deletes its per-session runtime directory at exit.

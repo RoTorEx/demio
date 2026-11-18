@@ -17,7 +17,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
 };
-const HELP: &str = "Demio — one remote for project demos\n\nUsage: demio [COMMAND]\n\n  list [--json]                 List demos/scenarios and creation times\n  register FILE [--replace]      Register a demo or scenario manifest\n  unregister ID                 Remove registry entry, preserve project files\n  validate FILE                 Validate demo/scenario without executing code\n  doctor ID                     Ask adapter for a read-only readiness check\n  run ID [--no-overlay] [--auto]  Run by exact scenario ID\n  init DIRECTORY                Scaffold a demo, scenarios and instructions\n  setup-config                  Create missing configuration\n  config                        Print configuration and path\n  themes                        List themes\n  theme NAME                    Set terminal theme\n  update                        Install latest verified release\n  help / --help                 Show this help\n  version / --version           Show version\n\nWithout a command: select a scenario interactively (list outside a terminal).\nF9 / Enter: next; F7: previous view; q / Ctrl+C: stop.\n";
+const HELP: &str = "Demio — one remote for project demos\n\nUsage: demio [COMMAND]\n\n  list [--json]                 List demos/scenarios and creation times\n  register FILE [--replace]      Register a demo or scenario manifest\n  unregister ID                 Remove registry entry, preserve project files\n  validate FILE                 Validate demo/scenario without executing code\n  doctor ID                     Ask adapter for a read-only readiness check\n  run ID [--no-overlay] [--auto|--dry-run]  Run by exact scenario ID\n                                --dry-run: narration only, nothing executed\n  init DIRECTORY                Scaffold a demo, scenarios and instructions\n  setup-config                  Create missing configuration\n  config                        Print configuration and path\n  themes                        List themes\n  theme NAME                    Set terminal theme\n  update                        Install latest verified release\n  help / --help                 Show this help\n  version / --version           Show version\n\nWithout a command: select a scenario interactively (list outside a terminal);\nEnter runs it, d starts a dry run.\nF9 / Enter: next; F7: previous view; q / Ctrl+C: stop.\n";
 fn main() {
     if let Ok(home) = registry::product_home() {
         usage::init("demio", home.join("logs/demio.jsonl"));
@@ -70,9 +70,9 @@ fn application() -> Result<()> {
             if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
                 return list(&config, false);
             }
-            if let Some(id) = selector::choose(&config, &cancelled)? {
+            if let Some((id, dry)) = selector::choose(&config, &cancelled)? {
                 let (channel, path) = config.resolve(&id)?;
-                run::run(channel, path, &config.theme, false, false, cancelled)?;
+                run::run(channel, path, &config.theme, false, false, dry, cancelled)?;
             }
         }
         "list" => {
@@ -126,19 +126,25 @@ fn application() -> Result<()> {
             run::doctor(&channel, &path, &cancelled)?;
         }
         "run" => {
-            let id = argument(&args, 1, "demio run ID [--no-overlay] [--auto]")?;
+            let id = argument(&args, 1, "demio run ID [--no-overlay] [--auto|--dry-run]")?;
             for option in args.iter().skip(2) {
-                if !matches!(option.as_str(), "--auto" | "--no-overlay") {
+                if !matches!(option.as_str(), "--auto" | "--no-overlay" | "--dry-run") {
                     bail!("Unknown run option: {option}");
                 }
+            }
+            let auto = args.iter().any(|x| x == "--auto");
+            let dry = args.iter().any(|x| x == "--dry-run");
+            if auto && dry {
+                bail!("--auto executes every step and --dry-run executes none; choose one");
             }
             let (channel, path) = config.resolve(id)?;
             run::run(
                 channel,
                 path,
                 &config.theme,
-                args.iter().any(|x| x == "--auto"),
+                auto,
                 args.iter().any(|x| x == "--no-overlay"),
+                dry,
                 cancelled,
             )?;
         }

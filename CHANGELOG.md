@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Add dry runs (`demio run ID --dry-run`, or d in the selector): walk every step's
+  narration with F9/F7 before a real run without preparing or executing anything.
+  Adapters may answer the new read-only `rehearse` operation to open the step's
+  windows; outside a terminal a dry run prints the script.
+
 ## [0.1.11] - 2026-11-05
 
 - Define portable demo delivery, destination setup and fixture/runtime verification; distinguish source-only bundles from runnable transfers.

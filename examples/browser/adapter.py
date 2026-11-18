@@ -37,7 +37,8 @@ for line in sys.stdin:
             with sync_playwright() as probe:
                 if not Path(probe.chromium.executable_path).exists():
                     raise RuntimeError('Run .venv/bin/python -m playwright install chromium')
-        elif op == 'prepare':
+        # A dry run's first rehearse opens the same local page; nothing is written.
+        elif op == 'prepare' or (op == 'rehearse' and step is None):
             from playwright.sync_api import sync_playwright
             handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=os.getcwd())
             server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), handler)
@@ -46,7 +47,7 @@ for line in sys.stdin:
             context = playwright.chromium.launch_persistent_context(str(Path(request['session_dir'])/'browser'), headless=os.environ.get('DEMIO_HEADLESS') == '1', viewport={'width':1280,'height':800})
             page = context.pages[0]
             page.goto(f'http://127.0.0.1:{server.server_port}'+parameters.get('start_path', '/'))
-        elif op in ('run', 'preview'):
+        elif op in ('run', 'preview', 'rehearse'):
             selectors = {'intro':'#role','fill':'#form','submit':'#status','approve':'#approval','close':'#status'}
             if step not in selectors:
                 raise RuntimeError('Unknown step')

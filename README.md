@@ -101,7 +101,7 @@ Legacy standalone manifests remain supported.
 The two-pane TUI shows demo headers with their scenarios on the left and
 separate demo/scenario details on the right. Dates retain the year; names use
 ` | `, with colors following GTD roles. ↑/↓ or j/k selects a scenario; Enter runs
-it; PgUp/PgDn scrolls details; e opens the owning demo root and selected scenario
+it; d starts a dry run; PgUp/PgDn scrolls details; e opens the owning demo root and selected scenario
 in VS Code; f reveals the scenario in Finder; q/Esc quits. Panes stay side by
 side. Non-terminal output remains a plain list; list --json includes demo
 identity and paths. Empty/unavailable states stay visible without running code.
@@ -149,6 +149,15 @@ window and clean up the session. Use `--no-overlay` for terminal controls only.
 Back is a **view**, not undo. Moving forward through completed steps previews
 without repeating writes. Next is blocked while working or after an error.
 Timeouts report an unknown outcome and never trigger automatic retries.
+
+### Dry run
+
+`demio run ID --dry-run` (or d in the selector) rehearses a scenario before the
+real run: F9/F7 move through every step's narration in the same window, and
+nothing is prepared or executed. If the adapter supports `rehearse`, it opens or
+focuses the windows each step uses, read-only; otherwise the dry run is
+narration only. Outside a terminal it prints the whole script. `--dry-run`
+cannot be combined with `--auto`.
 
 The window requests capture exclusion (`NSWindow.sharingType = .none`), matching
 the original presenter remote. This keeps controls and notes visible to the

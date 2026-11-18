@@ -60,6 +60,7 @@ Operations:
 | prepare | Prepare a fresh environment once before interaction |
 | run | Execute the named uncompleted step and verify its visible result |
 | preview | Focus/show the named completed step without business writes |
+| rehearse | Dry run only: open or focus windows, without step once and then per step; never write or change state |
 | cleanup | Close owned browser contexts and services |
 
 Keep stdout strictly JSON lines. Send logs to stderr. Replies must use the exact
@@ -86,6 +87,8 @@ profiles in the session directory. Do not detach/daemonize children. Demio sends
 cleanup, then terminates the adapter's process group on exit. Releasing external
 resources and budgets remains the adapter's responsibility. `--auto` deliberately
 executes all steps; use only after the project authorizes those actions.
+`--dry-run` executes none: Demio sends only `rehearse` and `cleanup`, and an
+adapter that refuses `rehearse` leaves the dry run as narration only.
 
 ## Native windows
 
