@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Enable the presenter window's Back and Next buttons during a dry run; they stayed
+  disabled, leaving only F9/F7 and the terminal.
+
 ## [0.1.12] - 2026-11-18
 
 - Add dry runs (`demio run ID --dry-run`, or d in the selector): walk every step's

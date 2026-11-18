@@ -184,12 +184,13 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard fontSize == 30, textAlignment == .right else { exit(8) }
         alignmentPicker.selectedSegment = 0; changeAlignment()
         let retainedFrame = notes.frame
-        for status in ["Working", "Failed", "Ready"] {
+        for status in ["Working", "Failed", "Ready", "Dry run"] {
             let state = ["status": status, "channel": "Native check", "step": "3/5", "role": "Approver", "title": "Updated step", "say": "Updated narration stays with the controls."]
             guard let data = try? JSONSerialization.data(withJSONObject: state) else { exit(13) }
             do { try data.write(to: session.appendingPathComponent("panel.json")) } catch { exit(13) }
             refresh()
-            guard back.isEnabled == (status == "Ready"), next.isEnabled == (status == "Ready"),
+            let idle = status == "Ready" || status == "Dry run"
+            guard back.isEnabled == idle, next.isEnabled == idle,
                   cue.string.contains("Updated narration"), cue.font?.pointSize == fontSize,
                   notes.frame == retainedFrame else { exit(13) }
         }
@@ -220,9 +221,10 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
             applyTextStyle()
             cue.scrollRangeToVisible(NSRange(location: 0, length: 0))
         }
-        // Ignore repeated button presses while an operation is in flight.
-        back.isEnabled = state["status"] == "Ready"
-        next.isEnabled = state["status"] == "Ready"
+        // Ignore repeated button presses while an operation is in flight. A dry run never has one.
+        let idle = ["Ready", "Dry run"].contains(state["status"] ?? "")
+        back.isEnabled = idle
+        next.isEnabled = idle
     }
     func installKeys() {
         let callback: EventHandlerUPP = { _, event, pointer in
