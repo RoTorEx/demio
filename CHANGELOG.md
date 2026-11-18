@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Default the presenter notes to 14 points, so a step's narration and wait tip fit
+  without scrolling. A saved font size is kept.
+
 ## [0.1.15] - 2026-11-18
 
 - Add an optional step `wait`: what to wait for before pressing F9, and why. It shows

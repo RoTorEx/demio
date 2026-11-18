@@ -122,8 +122,9 @@ The presenter speaks; there is no synthesized audio. The presenter window
 combines Back, Next, and speaker notes in one movable,
 resizable panel. Controls and narration stay together when moving or resizing.
 A−/A+ changes notes font size in two-point increments, from 14 to 48 points,
-with a 22-point default. This reading range keeps small text legible and large
-text usable with wrapping. Left, center, and right alignment apply to the full
+with a 14-point default: the smallest size, so a step's narration and wait tip fit
+without scrolling (the presenter's choice). This reading range keeps small text
+legible and large text usable with wrapping. Left, center, and right alignment apply to the full
 cue, including newly loaded steps. Font size and alignment persist in the shared
 config.toml [overlay] table (font_size and alignment). The CLI owns TOML parsing,
 atomic writes and legacy JSON migration; the native window calls its sibling CLI

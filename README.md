@@ -131,7 +131,7 @@ These preferences persist in the shared config.toml under `[overlay]`:
 
 ```toml
 [overlay]
-font_size = 22.0
+font_size = 14.0
 alignment = "left" # left, center, right
 ```
 

@@ -20,9 +20,9 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var last = Data()
     var keys: [EventHotKeyRef?] = []
     var timer: Timer?
-    var fontSize: CGFloat = 22
+    var fontSize: CGFloat = 14
     var textAlignment: NSTextAlignment = .left
-    let fontLabel = NSTextField(labelWithString: "22 pt")
+    let fontLabel = NSTextField(labelWithString: "14 pt")
     var smaller: NSButton!
     var larger: NSButton!
     var alignmentPicker: NSSegmentedControl!
@@ -121,7 +121,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
         cue.isEditable = false
         cue.isSelectable = true
         cue.drawsBackground = false
-        cue.font = .systemFont(ofSize: 22)
+        cue.font = .systemFont(ofSize: 14)
         cue.textColor = .labelColor
         cue.textContainerInset = NSSize(width: 4, height: 4)
         cue.isVerticallyResizable = true

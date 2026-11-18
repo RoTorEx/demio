@@ -14,7 +14,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            font_size: 22.0,
+            font_size: 14.0,
             alignment: "left".into(),
         }
     }
@@ -24,7 +24,7 @@ impl Settings {
         self.font_size = if self.font_size.is_finite() {
             self.font_size.clamp(14.0, 48.0)
         } else {
-            22.0
+            14.0
         };
         if !matches!(self.alignment.as_str(), "left" | "center" | "right") {
             self.alignment = "left".into();
@@ -87,7 +87,7 @@ pub fn command(arguments: &[String]) -> Result<()> {
                 .get("overlay")
                 .and_then(|t| t.get("font_size"))
                 .and_then(|v| v.as_float().or_else(|| v.as_integer().map(|v| v as f64)))
-                .unwrap_or(22.0),
+                .unwrap_or(14.0),
             alignment: document
                 .get("overlay")
                 .and_then(|t| t.get("alignment"))

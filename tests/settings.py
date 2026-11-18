@@ -41,7 +41,7 @@ with tempfile.TemporaryDirectory(dir=base) as temporary:
     config.write_text('theme = "calm"\n[overlay]\nfont_size = 99\nalignment = "invalid"\n')
     assert settings() == {'font_size':48.0,'alignment':'left'}
     config.write_text('theme = "calm"\n[overlay]\nfont_size = "invalid"\n')
-    assert settings() == {'font_size':22.0,'alignment':'left'}
+    assert settings() == {'font_size':14.0,'alignment':'left'}
     # A broken common config must never be replaced or consume old preferences.
     config.write_text('not valid TOML!')
     legacy.write_text('{"font_size":28,"alignment":"right"}')
