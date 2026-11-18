@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.13] - 2026-11-18
+
 - Enable the presenter window's Back and Next buttons during a dry run; they stayed
   disabled, leaving only F9/F7 and the terminal.
 
