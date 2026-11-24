@@ -1,5 +1,5 @@
 ---
-version: "2026-10-30.1"
+version: "2026-11-22.1"
 ---
 
 # AGENTS.md
@@ -40,7 +40,7 @@ This project uses committed local copies of the Vibecoding Kernel.
 
 ## Project routing
 
-- Work personally; never spawn or use subagents.
+- Work personally by default; use subagents only with the user's explicit permission.
 - Read `docs/contracts/adapter.md` for workflow integration.
 - For demo/scenario authoring, read `docs/scenarios.md` and the generated local
   `AGENTS.md`; its source is `templates/demo/AGENTS.md`.

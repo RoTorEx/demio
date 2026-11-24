@@ -1,7 +1,7 @@
 # Demo authoring instructions
 
 Read this file, `README.md`, `demo.json`, and the relevant scenario before work.
-Work personally; never spawn subagents. Preserve user data and unrelated work.
+Work personally by default; use subagents only with the user's explicit permission. Preserve user data and unrelated work.
 
 ## Terminology and ownership
 
