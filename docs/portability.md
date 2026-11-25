@@ -5,6 +5,10 @@ A scenario manifest and its adapters are not necessarily a runnable demo on anot
 ## Required delivery contract
 
 - State the supported operating system, architecture, CLI/native versions, adapter dependencies, live services and authorized account requirements.
+- State who acts in each scenario. An automated walkthrough drives and verifies
+  the application. A guided walkthrough leaves the named clicks, typing, or
+  approvals to the presenter. A recorded walkthrough presents previously
+  captured evidence. Check the promised behavior on the destination Mac.
 - Provide a supported setup entrypoint that resolves the extracted bundle directory, configures destination account/paths explicitly and registers into an isolated config when testing. Never assume the sender's home directory, checkout, Chrome profile, account or ancillary coordination tool exists.
 - Preserve existing stopped-project restrictions when applicable. A missing optional coordination tool on another machine is not a reason to manufacture an active state file or copy personal machine state.
 - Document interactive sign-in and OS automation permissions. Do not export passwords, tokens, Chrome cookies, a full browser profile or a secret-bearing database dump in an ordinary archive.

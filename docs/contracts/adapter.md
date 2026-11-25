@@ -29,6 +29,11 @@ scenario keys replace the same demo keys. Demio passes the effective JSON object
 in DEMIO_PARAMETERS and the canonical scenario path in DEMIO_SCENARIO. Adapters
 own interpreting routes, inputs and other parameter values.
 
+Use JSON arrays for ordered inputs such as the tabs to open. Demio may serialize
+object keys in a different order from the manifest. Record the window and tab
+handles returned by the browser so later steps and cleanup address the same
+session-owned tabs.
+
 Run `demio validate demo.json`, register the demo, doctor each scenario ID, then
 rehearse the actual interactive paths. Batch registration checks all members and
 ID conflicts before changing the registry. Scenario IDs and original creation
