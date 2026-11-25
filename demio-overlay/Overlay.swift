@@ -11,6 +11,10 @@ let session = URL(fileURLWithPath: CommandLine.arguments[1])
 let owner = Int32(CommandLine.arguments[2]) ?? 0
 func send(_ command: String) { print(command); fflush(stdout) }
 final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
+    private static let defaultFontSize: CGFloat = 11
+    private let minimumFontSize: CGFloat = 9
+    private let maximumFontSize: CGFloat = 48
+    private let initialContentSize = NSSize(width: 360, height: 240)
     var notes: NSPanel!
     var back: NSButton!
     var waitRange: NSRange?
@@ -20,9 +24,9 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var last = Data()
     var keys: [EventHotKeyRef?] = []
     var timer: Timer?
-    var fontSize: CGFloat = 14
+    var fontSize = Controller.defaultFontSize
     var textAlignment: NSTextAlignment = .left
-    let fontLabel = NSTextField(labelWithString: "14 pt")
+    let fontLabel = NSTextField(labelWithString: "")
     var smaller: NSButton!
     var larger: NSButton!
     var alignmentPicker: NSSegmentedControl!
@@ -44,7 +48,9 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func restoreSettings() {
         do {
             let state = try settings()
-            if let size = state["font_size"] as? Double, size.isFinite { fontSize = min(48, max(14, size)) }
+            if let size = state["font_size"] as? Double, size.isFinite {
+                fontSize = min(maximumFontSize, max(minimumFontSize, size))
+            }
             switch state["alignment"] as? String { case "center": textAlignment = .center; case "right": textAlignment = .right; default: textAlignment = .left }
         } catch { fputs("Could not load presenter settings from config.toml\n", stderr) }
     }
@@ -64,11 +70,11 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
             cue.textStorage?.addAttribute(.foregroundColor, value: NSColor.systemRed, range: tip)
         }
         fontLabel.stringValue = "\(Int(fontSize)) pt"
-        smaller?.isEnabled = fontSize > 14
-        larger?.isEnabled = fontSize < 48
+        smaller?.isEnabled = fontSize > minimumFontSize
+        larger?.isEnabled = fontSize < maximumFontSize
     }
-    @objc func decreaseFont() { fontSize = max(14, fontSize-2); applyTextStyle(); saveSettings() }
-    @objc func increaseFont() { fontSize = min(48, fontSize+2); applyTextStyle(); saveSettings() }
+    @objc func decreaseFont() { fontSize = max(minimumFontSize, fontSize-2); applyTextStyle(); saveSettings() }
+    @objc func increaseFont() { fontSize = min(maximumFontSize, fontSize+2); applyTextStyle(); saveSettings() }
     @objc func changeAlignment() {
         textAlignment = [.left, .center, .right][alignmentPicker.selectedSegment]
         applyTextStyle(); saveSettings()
@@ -97,9 +103,10 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     func applicationDidFinishLaunching(_ notification: Notification) {
         restoreSettings()
-        let top = NSScreen.main?.visibleFrame.maxY ?? 850
-        notes = panel(NSRect(x: 25, y: top-420, width: 480, height: 340), title: "Demio", resizable: true)
-        notes.minSize = NSSize(width: 400, height: 260)
+        let screen = NSScreen.main?.visibleFrame
+        let origin = NSPoint(x: (screen?.minX ?? 0) + 25, y: (screen?.maxY ?? 850) - initialContentSize.height - 80)
+        notes = panel(NSRect(origin: origin, size: initialContentSize), title: "Demio", resizable: true)
+        notes.contentMinSize = NSSize(width: 320, height: 200)
         let row = NSStackView()
         row.orientation = .horizontal
         row.distribution = .fillEqually
@@ -121,14 +128,14 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
         cue.isEditable = false
         cue.isSelectable = true
         cue.drawsBackground = false
-        cue.font = .systemFont(ofSize: 14)
+        cue.font = .systemFont(ofSize: fontSize)
         cue.textColor = .labelColor
         cue.textContainerInset = NSSize(width: 4, height: 4)
         cue.isVerticallyResizable = true
         cue.isHorizontallyResizable = false
         cue.autoresizingMask = [.width]
         cue.textContainer?.widthTracksTextView = true
-        cue.textContainer?.containerSize = NSSize(width: 410, height: CGFloat.greatestFiniteMagnitude)
+        cue.textContainer?.containerSize = NSSize(width: initialContentSize.width - 30, height: CGFloat.greatestFiniteMagnitude)
         scroll.documentView = cue
         let controls = NSStackView()
         controls.orientation = .horizontal
@@ -158,28 +165,29 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard notes.sharingType == .none else { exit(11) }
         guard NSApp.windows.filter({ $0.isVisible }).count == 1,
               back.window === notes, next.window === notes, cue.window === notes,
+              notes.contentView?.bounds.size == initialContentSize, cue.font?.pointSize == fontSize,
               notes.styleMask.contains(.resizable), !cue.string.isEmpty else { exit(3) }
         let original = notes.frame
         notes.setFrame(NSRect(x: original.minX+30, y: original.minY+20, width: 600, height: 360), display: true)
         notes.contentView?.layoutSubtreeIfNeeded()
         guard notes.frame.width == 600, notes.frame.height == 360 else { exit(4) }
-        notes.setContentSize(NSSize(width: 400, height: 260))
+        notes.setContentSize(notes.contentMinSize)
         notes.contentView?.layoutSubtreeIfNeeded()
         guard let content = notes.contentView else { exit(12) }
-        for control in [back!, next!, smaller!, larger!] {
+        for control in [back!, next!, smaller!, larger!, alignmentPicker!] as [NSControl] {
             let rect = control.convert(control.bounds, to: content)
             guard content.bounds.contains(rect), rect.width > 0, rect.height > 0 else { exit(12) }
         }
         notes.setFrame(NSRect(x: original.minX+30, y: original.minY+20, width: 600, height: 360), display: true)
         let originalFont = fontSize
         larger.performClick(nil)
-        guard fontSize == min(48, originalFont+2), cue.font?.pointSize == fontSize else { exit(5) }
+        guard fontSize == min(maximumFontSize, originalFont+2), cue.font?.pointSize == fontSize else { exit(5) }
         smaller.performClick(nil)
         guard fontSize == originalFont else { exit(6) }
-        fontSize = 14; applyTextStyle(); smaller.performClick(nil)
-        guard fontSize == 14 else { exit(9) }
-        fontSize = 48; applyTextStyle(); larger.performClick(nil)
-        guard fontSize == 48 else { exit(10) }
+        fontSize = minimumFontSize; applyTextStyle(); smaller.performClick(nil)
+        guard fontSize == minimumFontSize, !smaller.isEnabled else { exit(9) }
+        fontSize = maximumFontSize; applyTextStyle(); larger.performClick(nil)
+        guard fontSize == maximumFontSize, !larger.isEnabled else { exit(10) }
         fontSize = originalFont; applyTextStyle()
         for (index, expected) in [NSTextAlignment.left, .center, .right].enumerated() {
             alignmentPicker.selectedSegment = index
@@ -217,7 +225,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 }
             }
         }
-        fputs("Native UI: one combined capture-excluded panel, navigation controls, move/resize, font size, alignment and saved preferences passed.\n", stderr)
+        fputs("Native UI: one compact panel with sharing disabled, navigation controls, move/resize, font size, alignment and saved preferences passed.\n", stderr)
         NSApp.terminate(nil)
     }
     @objc func previous() { send("previous") }

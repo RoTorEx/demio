@@ -5,6 +5,10 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use toml_edit::{DocumentMut, Item, Table, value};
 
+const DEFAULT_FONT_SIZE: f64 = 11.0;
+const MIN_FONT_SIZE: f64 = 9.0;
+const MAX_FONT_SIZE: f64 = 48.0;
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Settings {
@@ -14,7 +18,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            font_size: 14.0,
+            font_size: DEFAULT_FONT_SIZE,
             alignment: "left".into(),
         }
     }
@@ -22,9 +26,9 @@ impl Default for Settings {
 impl Settings {
     fn normalized(mut self) -> Self {
         self.font_size = if self.font_size.is_finite() {
-            self.font_size.clamp(14.0, 48.0)
+            self.font_size.clamp(MIN_FONT_SIZE, MAX_FONT_SIZE)
         } else {
-            14.0
+            DEFAULT_FONT_SIZE
         };
         if !matches!(self.alignment.as_str(), "left" | "center" | "right") {
             self.alignment = "left".into();
@@ -87,7 +91,7 @@ pub fn command(arguments: &[String]) -> Result<()> {
                 .get("overlay")
                 .and_then(|t| t.get("font_size"))
                 .and_then(|v| v.as_float().or_else(|| v.as_integer().map(|v| v as f64)))
-                .unwrap_or(14.0),
+                .unwrap_or(DEFAULT_FONT_SIZE),
             alignment: document
                 .get("overlay")
                 .and_then(|t| t.get("alignment"))

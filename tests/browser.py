@@ -1,4 +1,4 @@
-"""Verify the browser adapter's real visible state and read-only preview."""
+"""Run with the example's Playwright Python and the built Demio CLI as the argument."""
 import json
 import os
 from pathlib import Path
@@ -17,3 +17,30 @@ with tempfile.TemporaryDirectory(dir=base) as temporary:
         call(8,'preview','fill');call(9,'preview','approve');call(10,'cleanup')
         adapter.wait(timeout=5);assert adapter.returncode==0
 print('Browser: paced fields, scrolling, submit, approve, final state and read-only preview passed.')
+
+binary = Path(sys.argv[1]).resolve()
+with tempfile.TemporaryDirectory(prefix='browser scaffold ', dir=base) as temporary:
+    home = Path(temporary)
+    demo = home / 'example demo'
+    env = dict(os.environ, DEMIO_HOME=str(home), DEMIO_CONFIG=str(home / 'config.toml'),
+               DEMIO_RUNTIME_DIR=str(home / 'runtime'), DEMIO_HEADLESS='1')
+
+    def cli(*args):
+        result = subprocess.run([str(binary), *map(str, args)], env=env, capture_output=True,
+                                text=True, timeout=60)
+        assert result.returncode == 0, (args, result.stdout, result.stderr)
+
+    cli('init', demo)
+    manifest = demo / 'demo.json'
+    definition = json.loads(manifest.read_text())
+    # Reuse the interpreter with Playwright available. The scaffold still launches from its demo root.
+    definition['adapter'][0] = sys.executable
+    manifest.write_text(json.dumps(definition))
+    cli('validate', manifest)
+    cli('register', manifest)
+    for path in definition['scenarios']:
+        scenario = json.loads((demo / path).read_text())['id']
+        cli('doctor', scenario)
+        cli('run', scenario, '--auto')
+    assert not list((home / 'runtime').iterdir())
+print('Browser scaffold: both generated walkthroughs ran from a relocated demo root and cleaned up.')

@@ -8,6 +8,7 @@ import sys
 import threading
 
 browser = context = page = server = playwright = None
+assets = Path(__file__).resolve().parent
 parameters = json.loads(os.environ.get("DEMIO_PARAMETERS", "{}"))
 summary = parameters.get("summary", "New laptop for the design team")
 reason = parameters.get("reason", "Our current laptop needs replacement.")
@@ -40,13 +41,20 @@ for line in sys.stdin:
         # A dry run's first rehearse opens the same local page; nothing is written.
         elif op == 'prepare' or (op == 'rehearse' and step is None):
             from playwright.sync_api import sync_playwright
-            handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=os.getcwd())
+            handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=assets)
             server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), handler)
             threading.Thread(target=server.serve_forever, daemon=True).start()
             playwright = sync_playwright().start()
-            context = playwright.chromium.launch_persistent_context(str(Path(request['session_dir'])/'browser'), headless=os.environ.get('DEMIO_HEADLESS') == '1', viewport={'width':1280,'height':800})
+            context = playwright.chromium.launch_persistent_context(
+                str(Path(request['session_dir']) / 'browser'),
+                headless=os.environ.get('DEMIO_HEADLESS') == '1',
+                viewport={'width': 1280, 'height': 800},
+                locale='en-US',
+                color_scheme='light',
+            )
             page = context.pages[0]
             page.goto(f'http://127.0.0.1:{server.server_port}'+parameters.get('start_path', '/'))
+            page.locator('#role').wait_for()
         elif op in ('run', 'preview', 'rehearse'):
             selectors = {'intro':'#role','fill':'#form','submit':'#status','approve':'#approval','close':'#status'}
             if step not in selectors:

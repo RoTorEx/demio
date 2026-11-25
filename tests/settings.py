@@ -20,6 +20,8 @@ with tempfile.TemporaryDirectory(dir=base) as temporary:
         return result
     def settings(*arguments):
         return json.loads(call('--overlay-settings', *arguments).stdout)
+    assert settings() == {'font_size':11.0,'alignment':'left'}
+    assert settings('1', 'left') == {'font_size':9.0,'alignment':'left'}
     original = '# Keep user configuration\ntheme = "ocean"\ncustom = "preserved"\n\n[channels.existing]\nname = "Existing scenario"\nmanifest = "/missing/scenario.json"\n'
     config.write_text(original)
     legacy.write_text('{"font_size":30,"alignment":"right"}')
@@ -41,7 +43,7 @@ with tempfile.TemporaryDirectory(dir=base) as temporary:
     config.write_text('theme = "calm"\n[overlay]\nfont_size = 99\nalignment = "invalid"\n')
     assert settings() == {'font_size':48.0,'alignment':'left'}
     config.write_text('theme = "calm"\n[overlay]\nfont_size = "invalid"\n')
-    assert settings() == {'font_size':14.0,'alignment':'left'}
+    assert settings() == {'font_size':11.0,'alignment':'left'}
     # A broken common config must never be replaced or consume old preferences.
     config.write_text('not valid TOML!')
     legacy.write_text('{"font_size":28,"alignment":"right"}')

@@ -121,12 +121,13 @@ A step contains its ID, title, role, narration text, and operation timeout.
 The presenter speaks; there is no synthesized audio. The presenter window
 combines Back, Next, and speaker notes in one movable,
 resizable panel. Controls and narration stay together when moving or resizing.
-A−/A+ changes notes font size in two-point increments, from 14 to 48 points,
-with a 14-point default: the smallest size, so a step's narration and wait tip fit
-without scrolling (the presenter's choice). This reading range keeps small text
-legible and large text usable with wrapping. Left, center, and right alignment apply to the full
-cue, including newly loaded steps. Font size and alignment persist in the shared
-config.toml [overlay] table (font_size and alignment). The CLI owns TOML parsing,
+A−/A+ changes notes font size by two points per click within 9–48 points.
+The 11-point default is half the 0.1.10 default. The initial 360 × 240 point
+content area keeps the panel compact during a demo. Presenters can resize the
+panel or adjust the font, and longer notes wrap and scroll. Left, center, and
+right alignment apply to the full cue, including newly loaded steps. Font size
+and alignment persist in the shared config.toml [overlay] table (font_size and
+alignment). The CLI owns TOML parsing,
 atomic writes and legacy JSON migration; the native window calls its sibling CLI
 through an internal settings interface, without interpreting TOML itself. Reads
 and writes honor DEMIO_CONFIG and DEMIO_HOME. Preference writes preserve other
