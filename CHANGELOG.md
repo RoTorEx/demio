@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-26
+
 - Show the scenario introduction before Start launches the adapter. Preparation
   displays progress and errors and reveals the first action when ready.
 - Add explicit presenter confirmation and Stop. Block advance during waits and
