@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-26
+
 - Restore the original selector palette with dark text on the Calm selection.
   Show ID, short date and ellipsized name. Scroll each pane independently and
   show scenario metadata before description and cues.

@@ -1,7 +1,7 @@
 import AppKit
 import Carbon
 
-let buildVersion = "0.2.1"
+let buildVersion = "0.2.2"
 let session = URL(fileURLWithPath: CommandLine.arguments[1])
 let owner = Int32(CommandLine.arguments[2]) ?? 0
 func send(_ command: String) { print(command); fflush(stdout) }
