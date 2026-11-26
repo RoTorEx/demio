@@ -164,9 +164,10 @@ session for inspection and stopping. The panel displays the adapter's progress
 and error detail.
 
 The bundled Chrome rehearsals verify the expected view before each action.
-If another tab or page interrupts the route, restore the expected Chrome view
-and click **Check route**. The terminal shortcut is r. A successful check
-re-enables **Forward** for the pending step.
+If another app, tab or page interrupts the route, restore the expected Chrome
+view and click **Check route**. The terminal shortcut is r. A successful check
+re-enables **Forward** for the pending step. With terminal-only controls, the
+terminal may retain keyboard focus while the expected Chrome tab is visible.
 
 ### Dry run
 

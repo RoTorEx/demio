@@ -18,7 +18,7 @@ The public routes need internet access, Python 3.10 or later, and Google Chrome
 in `/Applications`.
 Start opens a landing page in an isolated profile. The search uses Wikipedia’s
 own field and matching suggestion. Keep the rehearsal tabs in their original
-order. If you change tabs or open a different page, restore the rehearsal
+order. If you switch apps or tabs or open a different page, restore the rehearsal
 view and choose **Check route** to re-enable **Forward**. The Mac route
 defaults to `~/Desktop`.
 Set `parameters.directory` in `scenarios/mac-file/scenario.json` to choose an

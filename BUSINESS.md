@@ -179,7 +179,9 @@ An adapter can opt into read-only verification of the upcoming execution step.
 The presenter checks before making Forward available, while ready, and before
 dispatching the step. The 500 ms idle interval detects detours without
 redrawing or writing a new panel frame on unchanged results. The public Chrome
-adapter checks the expected tab, page and search prerequisites. A detected
+adapter checks the expected tab, page and search prerequisites. The native
+presenter publishes macOS foreground changes so the adapter can distinguish its
+Chrome instance when another application has focus. A detected
 detour disables Forward until the presenter restores the view and chooses
 Check route. Checking a restored view leaves the pending step unexecuted.
 

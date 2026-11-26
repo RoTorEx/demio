@@ -70,8 +70,8 @@ BrowserType.launch_persistent_context = inspect
     cli('run', scenarios['navigation']['id'], '--auto')
 
     next_key = b'\x1b[20~'
-    for variant in ('waiting', 'timeout', 'recovery'):
-        document = scenarios[variant]
+    for variant in ('waiting', 'event', 'timeout', 'recovery'):
+        document = scenarios['timeout' if variant == 'event' else variant]
         master, slave = pty.openpty()
         run_env = dict(env)
         if variant != 'waiting':
@@ -135,7 +135,13 @@ BrowserType.launch_persistent_context = inspect
                         _, first = expect('Ready', 1, after=still_drifted['generation'])
             expected_step = preceding_steps + 1
             os.write(master, next_key)
-            if variant == 'timeout':
+            if variant == 'event':
+                _, waiting = expect('Waiting', expected_step)
+                assert waiting['primary'] is None
+                page.locator('a[href="#Work"]:visible').first.click()
+                _, ready = expect('Ready', expected_step, after=waiting['generation'])
+                assert page.url.endswith('/Ada_Lovelace#Work') and ready['primary'] == 'next'
+            elif variant == 'timeout':
                 expect('Waiting', expected_step)
                 _, blocked = expect('Outcome unknown', expected_step)
                 assert blocked['primary'] is None
@@ -209,4 +215,4 @@ BrowserType.launch_persistent_context = inspect
             os.close(master)
     assert not list((home / 'runtime').iterdir())
 
-print('Browser scaffold: visible pointer events, typed query, live tabs, countdown, official download, confirmation, recovery, scrolling and close passed.')
+print('Browser scaffold: visible pointer events, typed query, live tabs, countdown, official download, navigation event, confirmation, recovery, scrolling and close passed.')

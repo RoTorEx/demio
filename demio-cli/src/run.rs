@@ -651,10 +651,12 @@ impl Presenter {
                 }
                 self.prepare_forward(channel, worker);
             }
-            (Work::Step { execute: true, .. }, Err(error))
-                if self.guarded && error.is::<RouteChanged>() =>
-            {
-                self.route_changed(error);
+            (Work::Step { .. }, Err(error)) if self.guarded && error.is::<RouteChanged>() => {
+                if self.guarded_step(total).is_some() {
+                    self.route_changed(error);
+                } else {
+                    self.change(Phase::Ready, format!("{error:#}\nTry the preview again."));
+                }
             }
             (
                 Work::Step {
@@ -922,8 +924,8 @@ pub fn run(
             continue;
         }
         if let (Some(Action::Previous), Some(index)) = (action, presenter.previous()) {
-            if let (Some(check), Some(worker)) = (&presenter.route_check, &worker) {
-                presenter.verify_route(&channel, worker, check.index, RouteIntent::Preview(index));
+            if let (Some(upcoming), Some(worker)) = (presenter.guarded_step(total), &worker) {
+                presenter.verify_route(&channel, worker, upcoming, RouteIntent::Preview(index));
             } else {
                 presenter.step(&channel, worker.as_ref(), index, false);
             }

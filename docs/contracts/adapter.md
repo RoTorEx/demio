@@ -131,6 +131,11 @@ frame's generation. The CLI discards commands from old frames. Stop works
 in every phase. The presenter combines controls, status and notes in one
 window that retains its position and size for the session. F7/F9 handle Back and
 Forward. Hover over the information button to see shortcuts and the wait legend.
+The panel observes changes to the session directory for new frames and closes
+when the owning CLI exits.
+The native helper also records the current foreground application PID in the
+temporary session directory when macOS reports an activation. The Chrome
+adapter compares it with the Chrome process it owns.
 
 ## Transfer to another machine
 

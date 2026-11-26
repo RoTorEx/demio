@@ -3,6 +3,7 @@ import ctypes
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tarfile
 import time
@@ -32,6 +33,8 @@ class BrowserInput:
     def __init__(self, headless, focus_required):
         self.position = None
         self.focus_required = focus_required
+        self.focus_path = None
+        self.chrome_pid = None
         self.warp = None
         if not headless and sys.platform == "darwin":
             graphics = ctypes.CDLL("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
@@ -39,7 +42,35 @@ class BrowserInput:
             self.warp.argtypes = [Point]
             self.warp.restype = ctypes.c_int32
 
+    def track_focus(self, session):
+        if not self.focus_required:
+            return
+        self.focus_path = Path(session) / "foreground-pid"
+        children = {}
+        processes = subprocess.check_output(["/bin/ps", "-axo", "pid=,ppid=,comm="], text=True)
+        for process in processes.splitlines():
+            pid, parent, executable = process.split(maxsplit=2)
+            children.setdefault(int(parent), []).append((int(pid), Path(executable).name))
+        owned = children.get(os.getpid(), []).copy()
+        while owned:
+            pid, command = owned.pop()
+            if command == CHROME.name:
+                self.chrome_pid = pid
+                return
+            owned.extend(children.get(pid, ()))
+        raise RuntimeError("Could not identify the owned Chrome process.")
+
+    def verify_focus(self):
+        if self.focus_required:
+            try:
+                focused_pid = int(self.focus_path.read_text())
+            except (OSError, ValueError):
+                focused_pid = None
+            if focused_pid != self.chrome_pid:
+                raise RouteChanged("Return to the rehearsal window in Chrome.")
+
     def move(self, page, x, y):
+        self.verify_focus()
         size = page.viewport_size
         start_x, start_y = self.position or (size["width"] * .26, size["height"] * .65)
         origin = None
@@ -49,12 +80,12 @@ class BrowserInput:
                           outerHeight - innerHeight, document.hasFocus()]"""
             )
             if not focused and self.focus_required:
-                raise RouteChanged("Return to the rehearsal tab in Chrome.")
+                raise RouteChanged("Click inside the rehearsal page in Chrome.")
             if focused and 0 <= frame_width <= 12 and 0 < toolbar < 250:
                 origin = (left + frame_width / 2, top + toolbar - 1)
         for step in range(19):
-            if self.focus_required and step in (6, 12, 18) and not page.evaluate("document.hasFocus()"):
-                raise RouteChanged("Return to the rehearsal tab in Chrome.")
+            if step in (6, 12, 18):
+                self.verify_focus()
             eased = ease(step / 18)
             px = start_x + (x - start_x) * eased
             py = start_y + (y - start_y) * eased
@@ -152,6 +183,7 @@ class Walkthrough:
             color_scheme="light",
         )
         self.context.set_default_timeout(10000)
+        self.input.track_focus(session)
         self.page = self.context.pages[0]
         landing = TIME_ZONES if self.route == "download" else WIKIPEDIA
         response = self.page.goto(landing, wait_until="domcontentloaded", timeout=25000)
@@ -164,6 +196,7 @@ class Walkthrough:
         self.page.bring_to_front()
 
     def verify_route(self, step):
+        self.input.verify_focus()
         url = {
             "search": WIKIPEDIA, "open-article": WIKIPEDIA,
             "article": ARTICLE, "biography": ARTICLE, "read-article": ARTICLE,
@@ -209,8 +242,10 @@ class Walkthrough:
             raise RouteChanged(f"Return to {url} in the rehearsal tab.")
         if self.context.pages != tabs:
             raise RouteChanged("Restore the rehearsal tabs in their original order.")
-        if not visible or (self.focus_required and not focused):
+        if not visible:
             raise RouteChanged("Return to the rehearsal tab in Chrome.")
+        if self.focus_required and not focused:
+            raise RouteChanged("Click inside the rehearsal page in Chrome.")
         if step == "search" and query != "":
             raise RouteChanged("Clear the Wikipedia search field.")
         if step == "open-article" and (query != QUERY or not result):
@@ -301,9 +336,6 @@ class Walkthrough:
             raise RuntimeError(f"Unknown download step: {step}")
 
     def check_work(self):
-        # Read the live document after the presenter may have used the browser
-        # while the adapter was idle.
-        # A presenter can change the URL while this Playwright client is idle.
         if self.page.evaluate("location.href") != ARTICLE + "#Work":
             raise RuntimeError("Work is not open. Select Work in the article contents and verify the heading.")
         self.page.get_by_role("heading", name="Work", exact=True).wait_for(state="visible")
@@ -314,9 +346,7 @@ class Walkthrough:
             self.section("#Biography")
         elif step == "await-work":
             respond(request, "status", waiting=True, detail="Waiting for the article’s Work link.")
-            self.page.wait_for_function(
-                "(url) => location.href === url", arg=ARTICLE + "#Work", timeout=30000
-            )
+            self.page.wait_for_url(ARTICLE + "#Work", wait_until="commit", timeout=30000)
             self.check_work()
         elif step == "check-work":
             self.check_work()
@@ -332,6 +362,7 @@ class Walkthrough:
     def preview(self, step):
         if not self.context:
             return  # A completed Close leaves the browser closed during cue review.
+        self.input.verify_focus()
         if step == "data" and self.data_tab and not self.data_tab.is_closed():
             self.data_tab.bring_to_front()
         elif self.route == "navigation" and step in ("article", "return"):

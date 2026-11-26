@@ -69,7 +69,8 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
     let helpButton = HoverButton()
     var last = Data()
     var keys: [EventHotKeyRef?] = []
-    var timer: Timer?
+    private var sessionUpdates: DispatchSourceFileSystemObject?
+    private var ownerExit: DispatchSourceProcess?
     var fontSize = Controller.defaultFontSize
     var textAlignment: NSTextAlignment = .left
     let fontLabel = NSTextField(labelWithString: "")
@@ -280,8 +281,37 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         window.contentView = glass
         return window
     }
+    @objc func publishForeground(_ notification: Notification? = nil) {
+        let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
+        try? "\(pid)\n".write(to: session.appendingPathComponent("foreground-pid"),
+                              atomically: true, encoding: .utf8)
+    }
+    func observeSession() {
+        guard owner > 0, getppid() == owner else { NSApp.terminate(nil); return }
+        let descriptor = open(session.path, O_EVTONLY | O_CLOEXEC)
+        guard descriptor >= 0 else {
+            fputs("Could not observe the Demio session.\n", stderr)
+            NSApp.terminate(nil)
+            return
+        }
+        // Atomic replacement of panel.json changes its parent directory.
+        let updates = DispatchSource.makeFileSystemObjectSource(fileDescriptor: descriptor,
+            eventMask: [.write, .delete, .rename], queue: .main)
+        updates.setEventHandler { [weak self] in self?.refresh() }
+        updates.setCancelHandler { close(descriptor) }
+        sessionUpdates = updates
+        updates.activate()
+        let process = DispatchSource.makeProcessSource(identifier: owner, eventMask: .exit, queue: .main)
+        process.setEventHandler { NSApp.terminate(nil) }
+        ownerExit = process
+        process.activate()
+        refresh()
+    }
     func applicationDidFinishLaunching(_ notification: Notification) {
         restoreSettings()
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(publishForeground),
+            name: NSWorkspace.didActivateApplicationNotification, object: nil)
+        publishForeground()
         let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
         let origin = NSPoint(x: screen.maxX - initialContentSize.width - 25, y: screen.minY + 25)
         notes = panel(NSRect(origin: origin, size: initialContentSize), title: "Demio", resizable: true)
@@ -356,8 +386,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         ])
         notes.orderFrontRegardless()
         installKeys()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in self?.refresh() }
-        refresh()
+        observeSession()
         if CommandLine.arguments.contains("--smoke") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.smoke() }
         }
@@ -379,6 +408,8 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
             }
         }
         guard notes.sharingType == .none else { exit(11) }
+        guard let foreground = try? String(contentsOf: session.appendingPathComponent("foreground-pid"), encoding: .utf8),
+              Int(foreground.trimmingCharacters(in: .whitespacesAndNewlines)) != nil else { exit(18) }
         let buttons = [back!, start!, next!, stateButton!, stop!, settingsButton!, helpButton]
         guard NSApp.windows.filter({ $0.isVisible }).count == 1,
               buttons.allSatisfy({ $0.window === notes && $0.image != nil }), cue.window === notes,
@@ -522,15 +553,16 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
             "role": "Presenter", "title": "Tip", "say": "Narration.", "wait": "Copilot's reply",
             "detail": "", "generation": states.count + 1, "primary": "next", "can_previous": true]
         guard let tipData = try? JSONSerialization.data(withJSONObject: tipState) else { exit(15) }
-        do { try tipData.write(to: session.appendingPathComponent("panel.json")) } catch { exit(15) }
-        refresh()
-        guard cue.string.contains("Wait: Copilot's reply"),
-              attributes(at: "Wait: Copilot's reply")?[.foregroundColor] as? NSColor == NSColor.systemRed,
-              attributes(at: "Wait: Copilot's reply")?[.font] as? NSFont == .systemFont(ofSize: 10),
-              attributes(at: "Narration.")?[.font] as? NSFont == .systemFont(ofSize: fontSize) else { exit(15) }
-        back.performClick(nil); next.performClick(nil); stop.performClick(nil)
-        fputs("Native UI: button layout and gating, normal body text, settings and shortcuts popovers, capture exclusion and preferences passed.\n", stderr)
-        NSApp.terminate(nil)
+        do { try tipData.write(to: session.appendingPathComponent("panel.json"), options: .atomic) } catch { exit(15) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            guard self.cue.string.contains("Wait: Copilot's reply"),
+                  attributes(at: "Wait: Copilot's reply")?[.foregroundColor] as? NSColor == NSColor.systemRed,
+                  attributes(at: "Wait: Copilot's reply")?[.font] as? NSFont == .systemFont(ofSize: 10),
+                  attributes(at: "Narration.")?[.font] as? NSFont == .systemFont(ofSize: self.fontSize) else { exit(15) }
+            self.back.performClick(nil); self.next.performClick(nil); self.stop.performClick(nil)
+            fputs("Native UI: session updates, button gating, notes, popovers, capture exclusion and preferences passed.\n", stderr)
+            NSApp.terminate(nil)
+        }
     }
     @objc func previous() {
         if let frame, frame.canPrevious { send("previous \(frame.generation)") }

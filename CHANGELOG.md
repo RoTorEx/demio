@@ -5,17 +5,19 @@
 - Restore the original selector palette with dark text on the Calm selection.
   Show ID, short date and ellipsized name. Scroll each pane independently and
   show scenario metadata before description and cues.
-- Give Back, Start/Confirm, Forward and Stop distinct controls and symbols.
+- Give Back, Start, Forward, Confirm and Stop distinct controls and symbols.
   Put Info before Read aloud and show shortcuts in a separate popover.
 - Rebuild the public browser rehearsals around visible input in an isolated
   Chrome window, including search, real link clicks, smooth scrolling and close.
-- Show recorded development token usage and its accounting basis in Metadata.
+- Show recorded development token usage and its accounting basis in Details.
 - Render the selector only when its content changes. Reduce registry reads
   and bound adapter response memory without changing completion and Stop behavior.
 - Lay out scenarios under their demo headings, abbreviate legacy IDs and token
   counts, and show step zero under Steps.
 - Keep presenter controls visible with a fixed state button beside Stop, hover
   help, and clear separation from notes. Check the Chrome route before Forward.
+- Check the native foreground application and refresh the presenter on session
+  updates. Wait for the browser's navigation event in the Wikipedia rehearsal.
 
 ## [0.2.1] - 2026-11-26
 
