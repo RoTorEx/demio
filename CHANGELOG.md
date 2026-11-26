@@ -12,6 +12,10 @@
 - Show recorded development token usage and its accounting basis in Metadata.
 - Render the selector only when its content changes. Reduce registry reads
   and bound adapter response memory without changing completion and Stop behavior.
+- Lay out scenarios under their demo headings, abbreviate legacy IDs and token
+  counts, and show step zero under Steps.
+- Keep presenter controls visible with a fixed state button beside Stop, hover
+  help, and clear separation from notes. Check the Chrome route before Forward.
 
 ## [0.2.1] - 2026-11-26
 

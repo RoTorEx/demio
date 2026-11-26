@@ -16,34 +16,8 @@ TIME_ZONES = "https://www.iana.org/time-zones"
 RELEASES = "https://www.iana.org/time-zones/releases"
 CHROME = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
 
-# The ring follows the same input events as the page. It remains visible in a
-# Chrome window recording even when the recorder omits the system cursor.
-POINTER = """
-(() => {
-    if (window !== window.top) return;
-    let pointer;
-    function move(event) {
-        if (!pointer) {
-            const host = document.createElement('div');
-            host.setAttribute('data-demio-pointer', '');
-            host.setAttribute('aria-hidden', 'true');
-            host.style.cssText = 'position:fixed;inset:0;z-index:2147483647;pointer-events:none';
-            pointer = document.createElement('div');
-            pointer.style.cssText = 'position:absolute;width:22px;height:22px;border-radius:50%;' +
-                'border:2px solid #1462dc;box-shadow:0 0 0 2px white;box-sizing:border-box';
-            host.attachShadow({mode:'closed'}).append(pointer);
-            document.documentElement.append(host);
-        }
-        pointer.style.transform = `translate(${event.clientX - 11}px,${event.clientY - 11}px)`;
-    }
-    window.addEventListener('mousemove', move, {passive:true});
-    window.addEventListener('mousedown', event => {
-        move(event);
-        pointer.style.background = '#1462dc55';
-        setTimeout(() => pointer.style.background = 'transparent', 350);
-    }, {passive:true, capture:true});
-})();
-"""
+class RouteChanged(RuntimeError):
+    pass
 
 
 class Point(ctypes.Structure):
@@ -55,8 +29,9 @@ def ease(progress):
 
 
 class BrowserInput:
-    def __init__(self, headless):
+    def __init__(self, headless, focus_required):
         self.position = None
+        self.focus_required = focus_required
         self.warp = None
         if not headless and sys.platform == "darwin":
             graphics = ctypes.CDLL("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
@@ -73,9 +48,13 @@ class BrowserInput:
                 """() => [screenX, screenY, outerWidth - innerWidth,
                           outerHeight - innerHeight, document.hasFocus()]"""
             )
+            if not focused and self.focus_required:
+                raise RouteChanged("Return to the rehearsal tab in Chrome.")
             if focused and 0 <= frame_width <= 12 and 0 < toolbar < 250:
                 origin = (left + frame_width / 2, top + toolbar - 1)
         for step in range(19):
+            if self.focus_required and step in (6, 12, 18) and not page.evaluate("document.hasFocus()"):
+                raise RouteChanged("Return to the rehearsal tab in Chrome.")
             eased = ease(step / 18)
             px = start_x + (x - start_x) * eased
             py = start_y + (y - start_y) * eased
@@ -140,7 +119,8 @@ class Walkthrough:
         self.parameters = json.loads(os.environ.get("DEMIO_PARAMETERS", "{}"))
         self.route = self.parameters["route"]
         self.headless = os.environ.get("DEMIO_HEADLESS") == "1"
-        self.input = BrowserInput(self.headless)
+        self.focus_required = not self.headless and os.environ.get("DEMIO_TERMINAL_CONTROLS") != "1"
+        self.input = BrowserInput(self.headless, self.focus_required)
         self.playwright = self.context = self.page = self.data_tab = None
 
     def check(self):
@@ -172,7 +152,6 @@ class Walkthrough:
             color_scheme="light",
         )
         self.context.set_default_timeout(10000)
-        self.context.add_init_script(POINTER)
         self.page = self.context.pages[0]
         landing = TIME_ZONES if self.route == "download" else WIKIPEDIA
         response = self.page.goto(landing, wait_until="domcontentloaded", timeout=25000)
@@ -183,6 +162,59 @@ class Walkthrough:
         else:
             self.page.locator("#searchInput").wait_for(state="visible")
         self.page.bring_to_front()
+
+    def verify_route(self, step):
+        url = {
+            "search": WIKIPEDIA, "open-article": WIKIPEDIA,
+            "article": ARTICLE, "biography": ARTICLE, "read-article": ARTICLE,
+            "data": ARTICLE + "#Work", "return": WIKIDATA,
+            "await-work": ARTICLE + "#Biography", "check-work": ARTICLE + "#Biography",
+            "read-work": ARTICLE + "#Work",
+        }.get(step)
+        page = self.page
+        tabs = [self.page]
+        if self.route == "download":
+            release = RELEASES + "/" + self.parameters["release"]
+            url = {
+                "release-history": TIME_ZONES, "release": RELEASES,
+                "timer": release, "download": release, "return": release, "close": RELEASES,
+            }.get(step)
+        elif self.route == "navigation":
+            if step == "return":
+                page = self.data_tab
+            if step in ("return", "close"):
+                tabs.append(self.data_tab)
+            if step == "close":
+                url = ARTICLE + "#Biography"
+        elif step == "close":
+            url = ARTICLE if self.route == "article" else ARTICLE + "#Work"
+        if url is None:
+            raise RuntimeError(f"No route defined for {step}.")
+        if not self.context or not page or page.is_closed():
+            raise RouteChanged("The rehearsal tab was closed. Stop and start a fresh run.")
+        try:
+            current, focused, visible, query, result = page.evaluate(
+                """([search, article]) => {
+                    const input = search && document.getElementById('searchInput');
+                    const link = search && document.querySelector('a[href="' + article + '"]');
+                    return [location.href, document.hasFocus(), document.visibilityState === 'visible',
+                            input ? input.value : null,
+                            Boolean(link && link.getClientRects().length)];
+                }""",
+                [step in ("search", "open-article"), ARTICLE],
+            )
+        except Exception as error:
+            raise RouteChanged("The rehearsal tab is unavailable. Reopen or stop the run.") from error
+        if current != url:
+            raise RouteChanged(f"Return to {url} in the rehearsal tab.")
+        if self.context.pages != tabs:
+            raise RouteChanged("Restore the rehearsal tabs in their original order.")
+        if not visible or (self.focus_required and not focused):
+            raise RouteChanged("Return to the rehearsal tab in Chrome.")
+        if step == "search" and query != "":
+            raise RouteChanged("Clear the Wikipedia search field.")
+        if step == "open-article" and (query != QUERY or not result):
+            raise RouteChanged(f"Enter {QUERY} and leave its search result visible.")
 
     def result_link(self):
         return self.page.locator(f'a[href="{ARTICLE}"]:visible').first
@@ -309,6 +341,7 @@ class Walkthrough:
 
     def run(self, request):
         step = request["step"]
+        self.verify_route(step)
         if step == "search":
             self.search()
         elif step == "open-article":
@@ -342,10 +375,15 @@ def main():
         request = json.loads(line)
         operation = request["op"]
         try:
+            capabilities = {}
             if operation == "check":
                 walkthrough.check()
             elif operation == "prepare" or (operation == "rehearse" and request["step"] is None):
                 walkthrough.prepare(request["session_dir"])
+                if operation == "prepare":
+                    capabilities["verify_route"] = True
+            elif operation == "verify":
+                walkthrough.verify_route(request["step"])
             elif operation == "run":
                 walkthrough.run(request)
             elif operation == "preview":
@@ -356,7 +394,9 @@ def main():
                 walkthrough.cleanup()
             else:
                 raise RuntimeError(f"Unsupported operation: {operation}")
-            respond(request, "done", ok=True)
+            respond(request, "done", ok=True, **capabilities)
+        except RouteChanged as error:
+            respond(request, "done", ok=False, route_changed=True, error=str(error))
         except Exception as error:
             respond(request, "done", ok=False, error=str(error).splitlines()[0])
         if operation == "cleanup":

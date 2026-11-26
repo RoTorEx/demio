@@ -69,6 +69,7 @@ Operations:
 |---|---|
 | check | Read-only dependency/environment check for doctor |
 | prepare | Prepare a fresh environment once before interaction |
+| verify | Optional read-only check of the expected view for the upcoming step |
 | run | Execute the named uncompleted step and verify its visible result |
 | preview | Focus/show the named completed step without business writes |
 | rehearse | Dry run only: open or focus windows, without step once and then per step; never write or change state |
@@ -100,6 +101,17 @@ allows the presenter to confirm a verified manual completion. Out-of-order IDs,
 malformed JSON, EOF and timeouts leave the outcome unknown. The presenter can
 inspect and stop the session before starting a fresh run.
 
+A successful prepare reply can opt into interactive route verification by
+returning `"verify_route": true`. Verify receives the upcoming step ID and checks
+the live view without changing focus, opening tabs or issuing input. Demio
+checks before enabling Forward, each half second while ready, and before
+dispatch. A rejected check keeps the same step pending. After restoring the
+view the presenter explicitly chooses Check route. A run reply can include
+`"ok": false, "route_changed": true` for a detour before a business mutation.
+Demio treats that result as a route check rather than manual step completion.
+Adapters receive `DEMIO_TERMINAL_CONTROLS=1` in terminal-only and automatic
+runs, where the terminal may hold keyboard focus.
+
 Keep browsers and application state in the persistent process. Store disposable
 profiles in the session directory. Do not detach or daemonize children. Stop
 gives the adapter up to two seconds to reply to cleanup before Demio terminates
@@ -118,7 +130,7 @@ displays the CLI's available actions and returns a command with the visible
 frame's generation. The CLI discards commands from old frames. Stop works
 in every phase. The presenter combines controls, status and notes in one
 window that retains its position and size for the session. F7/F9 handle Back and
-Forward. The information button shows these shortcuts and the wait legend.
+Forward. Hover over the information button to see shortcuts and the wait legend.
 
 ## Transfer to another machine
 

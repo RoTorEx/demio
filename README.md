@@ -98,10 +98,11 @@ before adapting it. Registration accepts demo.json (all declared scenarios) or a
 single scenario JSON. Run and doctor use a stable **scenario ID** printed by list.
 Legacy standalone manifests remain supported.
 
-The left pane groups scenarios and shows ID, short creation date (DD.MM.YY)
-and name. Long cells end in an ellipsis. The right pane starts with Metadata,
-including the full ID, type, project, creation date/time and source paths.
-Description, introduction and steps follow. The wheel scrolls the pane under
+The left pane shows a demo tree with ID, short creation date (DD.MM.YY) and
+scenario name. Legacy IDs show their first six characters and an ellipsis.
+The right pane starts with identity metadata, then Description and Steps.
+Introduction is step zero. Development tokens, run time and source paths
+appear below the steps. The wheel scrolls the pane under
 the pointer. ↑/↓ or j/k changes selection. Enter opens the presenter at step zero,
 and d opens a dry rehearsal. PgUp/PgDn scrolls the right pane. Press e to open the
 demo root and scenario in VS Code, f to reveal
@@ -128,12 +129,13 @@ See [Editing demos and scenarios](docs/scenarios.md) and the
 Pressing Enter on a scenario opens one movable presenter window on step **0**, the
 introduction. **Start scenario** opens the adapter and prepares its windows and
 data. Once preparation succeeds the presenter shows the distinct first step.
-**Forward** starts that step. **Back**, **Start** or **Confirm**, and **Forward**
-sit on one row. **Stop** has its own row below. **Info** precedes **Read aloud**,
+**Forward** starts that step. **Back**, **Start** and **Forward** stay on the
+first row. The fixed-size state button stays beside **Stop** on the second row.
+**Info** precedes **Read aloud**,
 and both sections wrap and scroll as the window resizes.
 The panel opens with a 360 × 240 pt content area and 11 pt notes by default.
 Open the gear on the right of the title to change the size or alignment of
-**Read aloud**. The adjacent **ⓘ** opens keyboard shortcuts and the wait legend.
+**Read aloud**. Hover over **ⓘ** to see keyboard shortcuts and the wait legend.
 **Info** uses a fixed font for step titles, progress and wait instructions.
 The shared config.toml stores presenter preferences under `[overlay]`.
 
@@ -160,6 +162,11 @@ completion** accepts a verified manual step, including a step the adapter explic
 failed. A timeout or invalid reply leaves the outcome unknown and locks the
 session for inspection and stopping. The panel displays the adapter's progress
 and error detail.
+
+The bundled Chrome rehearsals verify the expected view before each action.
+If another tab or page interrupts the route, restore the expected Chrome view
+and click **Check route**. The terminal shortcut is r. A successful check
+re-enables **Forward** for the pending step.
 
 ### Dry run
 

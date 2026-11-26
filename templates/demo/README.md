@@ -17,8 +17,9 @@ owns a route, introduction, ordered steps, narration and parameter overrides.
 The public routes need internet access, Python 3.10 or later, and Google Chrome
 in `/Applications`.
 Start opens a landing page in an isolated profile. The search uses Wikipedia’s
-own field and matching suggestion. A ring makes the pointer visible in window
-recordings. Keep the rehearsal tabs in their original order. The Mac route
+own field and matching suggestion. Keep the rehearsal tabs in their original
+order. If you change tabs or open a different page, restore the rehearsal
+view and choose **Check route** to re-enable **Forward**. The Mac route
 defaults to `~/Desktop`.
 Set `parameters.directory` in `scenarios/mac-file/scenario.json` to choose an
 existing writable folder. macOS may request Automation access for Terminal. The
@@ -49,4 +50,4 @@ stores source paths; later edits are loaded on the next run. Reopen the selector
 to refresh its metadata. e opens this demo root and the selected scenario in VS
 Code. f reveals the scenario in Finder. Select a scenario and read its step-zero
 introduction. Click **Start** to prepare it, then **Forward** for step one.
-Use **ⓘ** for shortcuts and **Stop** to end the rehearsal.
+Hover over **ⓘ** for shortcuts. Use **Stop** to end the rehearsal.

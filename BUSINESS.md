@@ -57,8 +57,9 @@ narration and parameter overrides. A step belongs to a scenario and invokes
 adapter behavior by its step ID. The scenario type is browser or system metadata.
 A legacy manifest without a type displays Unspecified.
 Optional development token metadata records input, cached input, output and
-the accounting basis. The cached count is part of input. Metadata displays
-the sum of input and output, with the allocation basis and cache breakdown.
+the accounting basis. The cached count is part of input. The selector's
+Development tokens section displays the total of input and output, the
+allocation basis and the cache breakdown with compact units.
 
 Demo-relative workspace defaults resolve at demo.json. An explicit scenario
 workspace override resolves beside its scenario JSON. Adapter commands execute
@@ -103,14 +104,16 @@ fall back to filesystem creation time, which is an approximation for copied or
 checked-out files. Unavailable manifests use the last registered metadata snapshot.
 Metadata tests cover date order, edits, missing manifests, and summer/winter time.
 
-The selector shows grouped scenarios on the left and details on the right.
-The list shows ID, Warsaw creation date as DD.MM.YY, and the scenario name.
-It uses an ellipsis for overflowing cells. The ID column takes at most
-12 characters so it leaves room for names. The full stable ID appears in
-Metadata and remains the CLI identity. Metadata starts the right pane with ID,
-name, type, project, creation date and time, source paths and session limit.
-Description, the step-zero cue, and the ordered steps with wait and confirmation
-cues follow. The mouse wheel scrolls the pane under the pointer and keeps the
+The selector shows a tree of demos and scenarios on the left and details on the
+right. Group labels start at the left and wrap at the pane edge. Each scenario
+shows ID, Warsaw creation date as DD.MM.YY, and name in evenly spaced columns.
+The ID column shows six characters and an ellipsis for longer IDs. The full
+stable ID appears in Metadata and remains the CLI identity. Scenario names
+end in an ellipsis when they exceed the available space.
+Metadata starts with scenario identity and creation time. Description and
+Steps follow, with Introduction as step zero. Development tokens, the maximum
+run time after setup and the source paths have separate sections below.
+The mouse wheel scrolls the pane under the pointer and keeps the
 selected scenario. PageUp/PageDown scroll details. Unavailable scenarios show
 the error in Metadata and refuse to open. An empty registry shows registration
 guidance.
@@ -134,10 +137,12 @@ own narration. Next runs that step. A step contains its ID, title, role,
 narration text, operation timeout, and optional confirmation requirement.
 The presenter reads the text marked **Read aloud** below **Info**. Both sections
 use regular-weight body text and distinct labels. The movable, resizable
-presenter places Back on the left, Start or Confirm in the center, Forward
-on the right, and Stop on its own row below. The gear sits at the right of
+presenter separates notes from navigation with a horizontal rule. Back, Start
+and Forward stay on the first row, with a fixed-size state control next to Stop
+on the second row. All controls stay visible. The gear sits at the right of
 the scenario title beside the circled information button. The gear opens
-settings and the information button opens the F7/F9 shortcuts and wait legend.
+settings by click and the information button opens the F7/F9 shortcuts and
+wait legend on hover.
 The panel initially sits at the lower-right so the left-side contents in the
 browser rehearsals stay reachable. A−/A+ changes the spoken text size by two
 points per click within 9–48 points. Left, center, and
@@ -169,6 +174,14 @@ failure after the presenter has verified completion manually. The presenter then
 advances with a separate Next. Timeout, lost transport and invalid replies lock
 the session with unknown outcome for inspection and stopping. Each new run
 creates a fresh environment. Adapters must make preparation safe for fresh runs.
+
+An adapter can opt into read-only verification of the upcoming execution step.
+The presenter checks before making Forward available, while ready, and before
+dispatching the step. The 500 ms idle interval detects detours without
+redrawing or writing a new panel frame on unchanged results. The public Chrome
+adapter checks the expected tab, page and search prerequisites. A detected
+detour disables Forward until the presenter restores the view and chooses
+Check route. Checking a restored view leaves the pending step unexecuted.
 
 A dry run lets the presenter learn the narration before a real run. After Start,
 Demio asks the adapter to `rehearse` once (30 seconds, long enough for a browser to open) and

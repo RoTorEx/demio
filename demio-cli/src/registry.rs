@@ -67,13 +67,15 @@ pub struct DevelopmentTokens {
 }
 
 impl DevelopmentTokens {
-    pub fn label(self) -> String {
-        let basis = match self.basis {
+    pub fn basis_label(self) -> &'static str {
+        match self.basis {
             TokenBasis::Measured => "measured",
             TokenBasis::Allocated => "allocated",
-        };
-        let total = u128::from(self.input) + u128::from(self.output);
-        format!("{total} ({basis})")
+        }
+    }
+
+    pub fn total(self) -> u128 {
+        u128::from(self.input) + u128::from(self.output)
     }
 }
 

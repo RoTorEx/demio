@@ -119,7 +119,20 @@ BrowserType.launch_persistent_context = inspect
                     query = 'Ada Lovelace'
                     assert page.evaluate('searchInputs') == [query[:i] for i in range(1, len(query) + 1)]
                     assert len({tuple(position) for position in page.evaluate('moves')}) > 6
-                    assert page.locator('[data-demio-pointer]').is_visible()
+                    assert page.locator('[data-demio-pointer]').count() == 0
+                    if variant == 'recovery':
+                        stray = chrome.contexts[0].new_page()
+                        _, drifted = expect('Route changed', 1)
+                        assert drifted['primary'] == 'restore'
+                        os.write(master, next_key)
+                        assert expect('Route changed', 1)[1]['generation'] == drifted['generation']
+                        os.write(master, b'r')
+                        _, still_drifted = expect('Route changed', 1, after=drifted['generation'])
+                        stray.close()
+                        page.bring_to_front()
+                        page.locator('#searchInput').click()
+                        os.write(master, b'r')
+                        _, first = expect('Ready', 1, after=still_drifted['generation'])
             expected_step = preceding_steps + 1
             os.write(master, next_key)
             if variant == 'timeout':

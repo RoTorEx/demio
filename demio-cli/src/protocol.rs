@@ -82,6 +82,17 @@ impl std::fmt::Display for Rejected {
 
 impl std::error::Error for Rejected {}
 
+#[derive(Debug)]
+pub struct RouteChanged(pub String);
+
+impl std::fmt::Display for RouteChanged {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for RouteChanged {}
+
 pub struct Operation {
     pub op: String,
     pub step: Option<String>,
@@ -152,6 +163,9 @@ impl Adapter {
                             .get("error")
                             .and_then(Value::as_str)
                             .unwrap_or("Adapter reported a failure");
+                        if reply.get("route_changed").and_then(Value::as_bool) == Some(true) {
+                            return Err(RouteChanged(error.into()).into());
+                        }
                         return Err(Rejected(error.into()).into());
                     }
                     None => bail!("Adapter done event must include a boolean ok"),
@@ -162,7 +176,12 @@ impl Adapter {
     }
 }
 impl Worker {
-    pub fn start(channel: &Channel, manifest: &Path, session: &Path) -> Result<Self> {
+    pub fn start(
+        channel: &Channel,
+        manifest: &Path,
+        session: &Path,
+        terminal_controls: bool,
+    ) -> Result<Self> {
         fs::create_dir_all(session)?;
         let workspace = channel.workspace_path(manifest)?;
         let mut command = Command::new(&channel.adapter[0]);
@@ -172,6 +191,10 @@ impl Worker {
             .env("DEMIO_SESSION_DIR", session)
             .env("DEMIO_WORKSPACE", &workspace)
             .env("DEMIO_SCENARIO", manifest)
+            .env(
+                "DEMIO_TERMINAL_CONTROLS",
+                if terminal_controls { "1" } else { "0" },
+            )
             .env(
                 "DEMIO_PARAMETERS",
                 serde_json::to_string(&channel.parameters)?,

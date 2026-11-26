@@ -67,6 +67,12 @@ for line in sys.stdin:
                 except OSError:
                     break
         return process.wait(timeout=1)
+    def remaining_output(master):
+        received = b''
+        deadline = time.monotonic() + 1
+        while time.monotonic() < deadline and select.select([master], [], [], .1)[0]:
+            received += os.read(master, 65536)
+        return received
     def finish(process, master):
         if process.poll() is None:
             process.kill()
@@ -90,7 +96,9 @@ for line in sys.stdin:
         subprocess.run([str(binary), 'register', str(manifest)], env=env, check=True, capture_output=True)
     process, master = start()
     try:
-        wait_text(master, 'Welcome to the second scenario.')
+        preview = wait_text(master, 'Welcome to the second scenario.')
+        plain = re.sub(rb'\x1b\[[0-9;?]*[ -/]*[@-~]', b'', preview)
+        assert plain.index(b'Steps') < plain.index(b'Introduction')
         # A third-party adapter stays dormant while the cue and wait guidance are visible.
         assert not (root/'actions.log').exists()
         os.write(master, b'e')
@@ -162,9 +170,9 @@ for line in sys.stdin:
         first_screen = wait_text(master, 'f Finder')
         assert b'\x1b[?1006h' in first_screen, 'Terminal mouse reporting must be enabled'
         os.write(master, b'\x1b[<65;70;7M' * 15)
-        right_moved = wait_text(master, 'ZZZZZZZZ')
+        right_moved = wait_text(master, 'ZZZZZZZZ') + remaining_output(master)
         assert all(int(column) > 45 for column in re.findall(rb'\x1b\[\d+;(\d+)H', right_moved))
-        os.write(master, b'\x1b[<65;10;7M' * 6)
+        os.write(master, b'\x1b[<65;10;7M' * 7)
         left_moved = wait_text(master, 'MMMMMM')
         assert all(int(column) <= 45 for column in re.findall(rb'\x1b\[\d+;(\d+)H', left_moved))
         os.write(master, b'f')

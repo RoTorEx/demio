@@ -1,5 +1,5 @@
 use crate::{
-    protocol::{Event, Rejected, SessionExpired, Worker},
+    protocol::{Event, Rejected, RouteChanged, SessionExpired, Worker},
     registry::{Channel, atomic_write},
 };
 use anyhow::{Context, Result, bail};
@@ -166,6 +166,7 @@ fn terminal_text(channel: &Channel, display: &Display) -> String {
         Some("start") => "s  Start scenario    ",
         Some("next") => "F9  Next    ",
         Some("confirm") => "c  Confirm completion    ",
+        Some("restore") => "r  Check route    ",
         _ => "",
     };
     let back = if display.can_previous {
@@ -202,7 +203,7 @@ fn paint(text: &str, theme: &str) -> Result<()> {
 }
 pub fn doctor(channel: &Channel, manifest: &Path, cancelled: &AtomicBool) -> Result<()> {
     let scratch = Scratch::new()?;
-    let worker = Worker::start(channel, manifest, &scratch.0)?;
+    let worker = Worker::start(channel, manifest, &scratch.0, true)?;
     worker.send("check", None, 30)?;
     let result = worker.wait(cancelled, None);
     worker.cleanup(None);
@@ -211,6 +212,8 @@ pub fn doctor(channel: &Channel, manifest: &Path, cancelled: &AtomicBool) -> Res
     Ok(())
 }
 const REHEARSE_PROBE_SECONDS: u64 = 30;
+const ROUTE_CHECK_INTERVAL: Duration = Duration::from_millis(500);
+const ROUTE_CHECK_TIMEOUT: u64 = 2;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Action {
@@ -218,6 +221,7 @@ enum Action {
     Next,
     Previous,
     Confirm,
+    Restore,
     Quit,
 }
 
@@ -228,6 +232,7 @@ impl Action {
             Self::Next => "next",
             Self::Previous => "previous",
             Self::Confirm => "confirm",
+            Self::Restore => "restore",
             Self::Quit => "quit",
         }
     }
@@ -245,6 +250,7 @@ impl Action {
             "next" => Some(Self::Next),
             "previous" => Some(Self::Previous),
             "confirm" => Some(Self::Confirm),
+            "restore" => Some(Self::Restore),
             _ => None,
         }
     }
@@ -261,6 +267,7 @@ impl Action {
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => Some(Self::Quit),
             KeyCode::Char('s') => Some(Self::Start),
             KeyCode::Char('c') => Some(Self::Confirm),
+            KeyCode::Char('r') => Some(Self::Restore),
             KeyCode::F(9) => Some(Self::Next),
             KeyCode::F(7) => Some(Self::Previous),
             _ => None,
@@ -313,9 +320,24 @@ enum Work {
     Step { index: usize, execute: bool },
 }
 
+#[derive(Clone, Copy)]
+enum RouteIntent {
+    Monitor,
+    Ready,
+    Advance,
+    Preview(usize),
+}
+
+struct RouteCheck {
+    index: usize,
+    intent: RouteIntent,
+}
+
 enum Phase {
     Introduction,
     Ready,
+    CheckingRoute,
+    RouteChanged,
     Working(Work),
     Confirm {
         index: usize,
@@ -336,6 +358,9 @@ struct Presenter {
     rehearsal_windows: bool,
     generation: u64,
     deadline: Option<Instant>,
+    guarded: bool,
+    route_check: Option<RouteCheck>,
+    next_route_check: Instant,
 }
 
 impl Presenter {
@@ -354,6 +379,9 @@ impl Presenter {
             rehearsal_windows: false,
             generation: 0,
             deadline: None,
+            guarded: false,
+            route_check: None,
+            next_route_check: Instant::now(),
         }
     }
 
@@ -369,6 +397,7 @@ impl Presenter {
             Phase::Introduction => Some(Action::Start),
             Phase::Ready if self.position.next(total).is_some() => Some(Action::Next),
             Phase::Confirm { .. } => Some(Action::Confirm),
+            Phase::RouteChanged => Some(Action::Restore),
             _ => None,
         }
     }
@@ -376,6 +405,8 @@ impl Presenter {
     fn status(&self, total: usize) -> &'static str {
         match self.phase {
             Phase::Introduction => "Introduction",
+            Phase::CheckingRoute => "Checking route",
+            Phase::RouteChanged => "Route changed",
             Phase::Working(Work::Prepare) => "Preparing",
             Phase::Working(_) if self.waiting => "Waiting",
             Phase::Working(_) => "Working",
@@ -390,7 +421,9 @@ impl Presenter {
 
     fn index(&self) -> Option<usize> {
         match self.phase {
-            Phase::Ready => self.position.view.or(Some(0)),
+            Phase::Ready | Phase::CheckingRoute | Phase::RouteChanged => {
+                self.position.view.or(Some(0))
+            }
             Phase::Working(Work::Step { index, .. }) | Phase::Confirm { index, .. } => Some(index),
             Phase::Blocked { index, .. } => index,
             Phase::Introduction | Phase::Working(Work::Prepare) => None,
@@ -444,19 +477,95 @@ impl Presenter {
         self.change(Phase::Ready, detail);
     }
 
+    fn guarded_step(&self, total: usize) -> Option<usize> {
+        if !self.guarded {
+            return None;
+        }
+        self.position
+            .next(total)
+            .and_then(|(index, execute)| execute.then_some(index))
+    }
+
+    fn prepare_forward(&mut self, channel: &Channel, worker: &Worker) {
+        if let Some(index) = self.guarded_step(channel.steps.len()) {
+            self.verify_route(channel, worker, index, RouteIntent::Ready);
+        } else {
+            self.ready(channel.steps.len());
+        }
+    }
+
+    fn verify_route(
+        &mut self,
+        channel: &Channel,
+        worker: &Worker,
+        index: usize,
+        intent: RouteIntent,
+    ) {
+        if !matches!(intent, RouteIntent::Monitor) {
+            self.change(Phase::CheckingRoute, "Checking the rehearsal tab and page…");
+        }
+        if let Some(check) = &mut self.route_check {
+            debug_assert_eq!(check.index, index);
+            check.intent = intent;
+            return;
+        }
+        match worker.send(
+            "verify",
+            Some(&channel.steps[index].id),
+            ROUTE_CHECK_TIMEOUT,
+        ) {
+            Ok(()) => self.route_check = Some(RouteCheck { index, intent }),
+            Err(error) => self.blocked(Some(index), "Outcome unknown", error.to_string()),
+        }
+    }
+
+    fn route_changed(&mut self, error: anyhow::Error) {
+        self.change(
+            Phase::RouteChanged,
+            format!("{error:#}\nChoose Check route after restoring the rehearsal view."),
+        );
+    }
+
+    fn finish_route_check(
+        &mut self,
+        channel: &Channel,
+        worker: &Worker,
+        check: RouteCheck,
+        result: Result<serde_json::Value>,
+    ) {
+        self.next_route_check = Instant::now() + ROUTE_CHECK_INTERVAL;
+        match result {
+            Ok(_) => match check.intent {
+                RouteIntent::Monitor => (),
+                RouteIntent::Ready => self.ready(channel.steps.len()),
+                RouteIntent::Advance => self.step(channel, Some(worker), check.index, true),
+                RouteIntent::Preview(index) => self.step(channel, Some(worker), index, false),
+            },
+            Err(error) if error.is::<RouteChanged>() || error.is::<Rejected>() => {
+                self.route_changed(error);
+            }
+            Err(error) => self.blocked(
+                Some(check.index),
+                "Outcome unknown",
+                format!("Could not verify the route. {error:#}\nStop and inspect the application."),
+            ),
+        }
+    }
+
     fn blocked(&mut self, index: Option<usize>, status: &'static str, detail: impl Into<String>) {
         self.change(Phase::Blocked { index, status }, detail);
     }
 
     fn may_have_pending_operation(&self) -> bool {
-        matches!(
-            self.phase,
-            Phase::Working(_)
-                | Phase::Blocked {
-                    status: "Outcome unknown",
-                    ..
-                }
-        )
+        self.route_check.is_some()
+            || matches!(
+                self.phase,
+                Phase::Working(_)
+                    | Phase::Blocked {
+                        status: "Outcome unknown",
+                        ..
+                    }
+            )
     }
 
     fn step(&mut self, channel: &Channel, worker: Option<&Worker>, index: usize, execute: bool) {
@@ -495,9 +604,13 @@ impl Presenter {
                 self.rehearsal_windows = result.is_ok();
                 self.step(channel, Some(worker), 0, true);
             }
-            (Work::Prepare, Ok(_)) => {
+            (Work::Prepare, Ok(reply)) => {
                 self.deadline = Some(Instant::now() + Duration::from_secs(channel.session_seconds));
-                self.ready(total);
+                self.guarded = reply
+                    .get("verify_route")
+                    .and_then(serde_json::Value::as_bool)
+                    == Some(true);
+                self.prepare_forward(channel, worker);
             }
             (Work::Prepare, Err(error)) => {
                 self.blocked(None, "Preparation failed", format!("{error:#}"));
@@ -525,10 +638,23 @@ impl Presenter {
             }
             (Work::Step { index, execute }, Ok(_)) => {
                 self.position.finish(index, execute);
-                self.ready(total);
                 if !self.dry {
-                    journal(channel, &self.position, self.status(total));
+                    journal(
+                        channel,
+                        &self.position,
+                        if self.position.completed == total {
+                            "Finished"
+                        } else {
+                            "Ready"
+                        },
+                    );
                 }
+                self.prepare_forward(channel, worker);
+            }
+            (Work::Step { execute: true, .. }, Err(error))
+                if self.guarded && error.is::<RouteChanged>() =>
+            {
+                self.route_changed(error);
             }
             (
                 Work::Step {
@@ -601,7 +727,7 @@ fn auto_run(
         bail!("This scenario requires presenter confirmation. Run it interactively.");
     }
     let scratch = Scratch::new()?;
-    let worker = Worker::start(channel, manifest, &scratch.0)?;
+    let worker = Worker::start(channel, manifest, &scratch.0, true)?;
     let mut position = Position::default();
     let mut prepared = false;
     let mut deadline = None;
@@ -743,8 +869,8 @@ pub fn run(
                     } else {
                         ("prepare", channel.steps[0].timeout_seconds)
                     };
-                    let started =
-                        Worker::start(&channel, &manifest, &scratch.0).and_then(|worker| {
+                    let started = Worker::start(&channel, &manifest, &scratch.0, no_overlay)
+                        .and_then(|worker| {
                             worker.send(op, None, timeout)?;
                             Ok(worker)
                         });
@@ -762,13 +888,28 @@ pub fn run(
                 }
                 Some(Action::Next) => {
                     if let Some((index, execute)) = presenter.position.next(total) {
-                        presenter.step(&channel, worker.as_ref(), index, execute);
+                        if let Some(worker) =
+                            worker.as_ref().filter(|_| execute && presenter.guarded)
+                        {
+                            presenter.verify_route(&channel, worker, index, RouteIntent::Advance);
+                        } else {
+                            presenter.step(&channel, worker.as_ref(), index, execute);
+                        }
+                    }
+                }
+                Some(Action::Restore) => {
+                    if let (Some(index), Some(worker)) = (presenter.guarded_step(total), &worker) {
+                        presenter.verify_route(&channel, worker, index, RouteIntent::Ready);
                     }
                 }
                 Some(Action::Confirm) => {
                     if let Phase::Confirm { index, recovery } = presenter.phase {
                         presenter.position.finish(index, true);
-                        presenter.ready(total);
+                        if let Some(worker) = &worker {
+                            presenter.prepare_forward(&channel, worker);
+                        } else {
+                            presenter.ready(total);
+                        }
                         journal(
                             &channel,
                             &presenter.position,
@@ -781,7 +922,11 @@ pub fn run(
             continue;
         }
         if let (Some(Action::Previous), Some(index)) = (action, presenter.previous()) {
-            presenter.step(&channel, worker.as_ref(), index, false);
+            if let (Some(check), Some(worker)) = (&presenter.route_check, &worker) {
+                presenter.verify_route(&channel, worker, check.index, RouteIntent::Preview(index));
+            } else {
+                presenter.step(&channel, worker.as_ref(), index, false);
+            }
             continue;
         }
         if let Some(worker) = &worker {
@@ -793,13 +938,19 @@ pub fn run(
                 presenter.waiting = progress.waiting;
             }
             while let Ok(event) = worker.events.try_recv() {
-                let Phase::Working(work) = presenter.phase else {
-                    continue;
-                };
-                match event {
-                    Event::Done(result) => presenter.finish_work(&channel, worker, work, result),
-                    Event::CleanupComplete => (),
+                if let Event::Done(result) = event {
+                    if let Some(check) = presenter.route_check.take() {
+                        presenter.finish_route_check(&channel, worker, check, result);
+                    } else if let Phase::Working(work) = presenter.phase {
+                        presenter.finish_work(&channel, worker, work, result);
+                    }
                 }
+            }
+            let monitor_due = matches!(presenter.phase, Phase::Ready)
+                && presenter.route_check.is_none()
+                && Instant::now() >= presenter.next_route_check;
+            if let Some(index) = presenter.guarded_step(total).filter(|_| monitor_due) {
+                presenter.verify_route(&channel, worker, index, RouteIntent::Monitor);
             }
         }
     }

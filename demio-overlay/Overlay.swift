@@ -30,6 +30,23 @@ struct PresenterFrame: Decodable {
     }
 }
 
+final class HoverButton: NSButton {
+    var onHover: ((Bool) -> Void)?
+    private var hoverArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        hoverArea = area
+        addTrackingArea(area)
+    }
+
+    override func mouseEntered(with event: NSEvent) { onHover?(true) }
+    override func mouseExited(with event: NSEvent) { onHover?(false) }
+}
+
 final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPopoverDelegate {
     private static let defaultFontSize: CGFloat = 11
     private let minimumFontSize: CGFloat = 9
@@ -37,9 +54,11 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
     private let initialContentSize = NSSize(width: 360, height: 240)
     var notes: NSPanel!
     var back: NSButton!
-    var startOrConfirm: NSButton!
+    var start: NSButton!
     var next: NSButton!
+    var stateButton: NSButton!
     var stop: NSButton!
+    let separator = NSBox()
     var frame: PresenterFrame?
     let cue = NSTextView()
     let title = NSTextField(labelWithString: "Demio")
@@ -47,7 +66,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
     let settingsPopover = NSPopover()
     let helpPopover = NSPopover()
     var settingsButton: NSButton!
-    var helpButton: NSButton!
+    let helpButton = HoverButton()
     var last = Data()
     var keys: [EventHotKeyRef?] = []
     var timer: Timer?
@@ -180,12 +199,13 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
 
         ❕ Info   Step, status and wait cues
         👤 Read aloud   Presenter narration
-        Wait   Advance after the result or confirmation
+        Confirm   Accept a verified result
+        Check route   Verify the restored rehearsal view
         """)
         legend.font = .systemFont(ofSize: 11)
         legend.translatesAutoresizingMaskIntoConstraints = false
         let controller = NSViewController()
-        let size = NSSize(width: 270, height: 130)
+        let size = NSSize(width: 290, height: 142)
         controller.view = NSView(frame: NSRect(origin: .zero, size: size))
         controller.view.addSubview(legend)
         NSLayoutConstraint.activate([
@@ -210,12 +230,21 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         }
     }
     @objc func toggleSettings() { toggle(settingsPopover, from: settingsButton, closing: helpPopover) }
-    @objc func toggleHelp() { toggle(helpPopover, from: helpButton, closing: settingsPopover) }
+    func hoverHelp(_ entered: Bool) {
+        if !entered {
+            helpPopover.close()
+        } else if !helpPopover.isShown {
+            toggle(helpPopover, from: helpButton, closing: settingsPopover)
+        }
+    }
     func popoverDidShow(_ notification: Notification) {
         (notification.object as? NSPopover)?.contentViewController?.view.window?.sharingType = .none
     }
-    func button(_ label: String, symbol: String, action: Selector, iconOnly: Bool = false) -> NSButton {
-        let control = NSButton(title: label, target: self, action: action)
+    func button(_ label: String, symbol: String, action: Selector?, iconOnly: Bool = false,
+                control: NSButton = NSButton()) -> NSButton {
+        control.title = label
+        control.target = self
+        control.action = action
         control.bezelStyle = .rounded
         control.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
         control.imagePosition = iconOnly ? .imageOnly : .imageLeading
@@ -263,15 +292,20 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         row.detachesHiddenViews = false
         row.spacing = 8
         back = button("Back", symbol: "arrow.left", action: #selector(previous))
-        startOrConfirm = button("Start", symbol: "play.fill", action: #selector(performPrimary))
+        start = button("Start", symbol: "play.fill", action: #selector(startScenario))
+        start.setAccessibilityLabel("Start scenario")
         next = button("Forward", symbol: "arrow.right", action: #selector(forward))
         next.imagePosition = .imageTrailing
+        stateButton = button("Confirm", symbol: "checkmark", action: #selector(performStateAction))
         stop = button("Stop", symbol: "stop.fill", action: #selector(stopScenario))
-        [back!, startOrConfirm!, next!].forEach(row.addArrangedSubview)
+        [back!, start!, next!].forEach(row.addArrangedSubview)
+        let stateRow = NSStackView(views: [stateButton, stop])
+        stateRow.distribution = .fillEqually
+        stateRow.spacing = 8
         let body = NSStackView()
         body.orientation = .vertical
         body.alignment = .centerX
-        body.spacing = 8
+        body.spacing = 6
         body.translatesAutoresizingMaskIntoConstraints = false
         title.font = .systemFont(ofSize: 13, weight: .semibold)
         title.lineBreakMode = .byTruncatingTail
@@ -281,7 +315,9 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         status.lineBreakMode = .byTruncatingTail
         status.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         settingsButton = button("Settings", symbol: "gearshape", action: #selector(toggleSettings), iconOnly: true)
-        helpButton = button("Shortcuts and legend", symbol: "info.circle", action: #selector(toggleHelp), iconOnly: true)
+        _ = button("Shortcuts and legend", symbol: "info.circle", action: nil, iconOnly: true, control: helpButton)
+        helpButton.toolTip = nil
+        helpButton.onHover = { [weak self] entered in self?.hoverHelp(entered) }
         let header = NSStackView(views: [title, settingsButton, helpButton])
         header.distribution = .fill
         header.alignment = .centerY
@@ -302,7 +338,8 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         cue.textContainer?.widthTracksTextView = true
         cue.textContainer?.containerSize = NSSize(width: initialContentSize.width - 30, height: CGFloat.greatestFiniteMagnitude)
         scroll.documentView = cue
-        for view in [header, status, scroll, row, stop!] as [NSView] { body.addArrangedSubview(view) }
+        separator.boxType = .separator
+        for view in [header, status, scroll, separator, row, stateRow] as [NSView] { body.addArrangedSubview(view) }
         notes.contentView!.addSubview(body)
         NSLayoutConstraint.activate([
             body.leadingAnchor.constraint(equalTo: notes.contentView!.leadingAnchor, constant: 12),
@@ -312,8 +349,10 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
             header.widthAnchor.constraint(equalTo: body.widthAnchor),
             status.widthAnchor.constraint(equalTo: body.widthAnchor),
             scroll.widthAnchor.constraint(equalTo: body.widthAnchor),
+            separator.widthAnchor.constraint(equalTo: body.widthAnchor),
             row.widthAnchor.constraint(equalTo: body.widthAnchor),
-            scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 60),
+            stateRow.widthAnchor.constraint(equalToConstant: 240),
+            scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 56),
         ])
         notes.orderFrontRegardless()
         installKeys()
@@ -340,7 +379,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
             }
         }
         guard notes.sharingType == .none else { exit(11) }
-        let buttons = [back!, startOrConfirm!, next!, stop!, settingsButton!, helpButton!]
+        let buttons = [back!, start!, next!, stateButton!, stop!, settingsButton!, helpButton]
         guard NSApp.windows.filter({ $0.isVisible }).count == 1,
               buttons.allSatisfy({ $0.window === notes && $0.image != nil }), cue.window === notes,
               notes.contentView?.bounds.size == initialContentSize, narrationSize() == fontSize,
@@ -365,15 +404,19 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
                 exit(12)
             }
         }
-        let center = startOrConfirm.convert(startOrConfirm.bounds, to: content)
+        let center = start.convert(start.bounds, to: content)
         let backRect = back.convert(back.bounds, to: content)
         let nextRect = next.convert(next.bounds, to: content)
         let stopRect = stop.convert(stop.bounds, to: content)
+        let stateRect = stateButton.convert(stateButton.bounds, to: content)
+        let rule = separator.convert(separator.bounds, to: content)
         let gearRect = settingsButton.convert(settingsButton.bounds, to: content)
         let helpRect = helpButton.convert(helpButton.bounds, to: content)
         guard backRect.maxX < center.minX, center.maxX < nextRect.minX,
               abs(center.midX - content.bounds.midX) < 2,
-              stopRect.maxY < center.minY, gearRect.maxX < helpRect.minX,
+              stopRect.maxY < center.minY, stateRect.maxX < stopRect.minX,
+              abs(stopRect.midY - stateRect.midY) < 2, rule.minY > center.maxY,
+              gearRect.maxX < helpRect.minX,
               content.bounds.maxX - helpRect.maxX < 16 else {
             fputs("Presenter positions: \([backRect, center, nextRect, stopRect, gearRect, helpRect]) in \(content.bounds).\n", stderr)
             exit(12)
@@ -425,20 +468,29 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         guard fontSize == 30, textAlignment == .right else { exit(8) }
         alignmentPicker.selectedSegment = 0; changeAlignment()
         helpButton.performClick(nil)
+        guard !helpPopover.isShown, !helpButton.trackingAreas.isEmpty,
+              let enter = NSEvent.enterExitEvent(with: .mouseEntered, location: .zero,
+                  modifierFlags: [], timestamp: 0, windowNumber: notes.windowNumber,
+                  context: nil, eventNumber: 0, trackingNumber: 0, userData: nil),
+              let leave = NSEvent.enterExitEvent(with: .mouseExited, location: .zero,
+                  modifierFlags: [], timestamp: 0, windowNumber: notes.windowNumber,
+                  context: nil, eventNumber: 0, trackingNumber: 0, userData: nil) else { exit(17) }
+        helpButton.mouseEntered(with: enter)
         guard !settingsPopover.isShown, helpPopover.isShown,
               let helpContent = helpPopover.contentViewController?.view,
               let helpWindow = helpContent.window, helpWindow.sharingType == .none,
               let legend = helpContent.subviews.first as? NSTextField,
               legend.stringValue.contains("F7"), legend.stringValue.contains("F9"),
-              legend.stringValue.contains("Wait") else { exit(17) }
-        snapshot(helpWindow.contentView?.superview ?? helpContent, as: "shortcuts")
-        helpButton.performClick(nil)
+              legend.stringValue.contains("Check route") else { exit(17) }
+        helpButton.mouseExited(with: leave)
         guard !helpPopover.isShown, notes.sharingType == .none else { exit(17) }
         let retainedFrame = notes.frame
+        let stateSize = stateButton.frame.size
         let states: [(String, String?, Bool)] = [
             ("Introduction", "start", false), ("Preparing", nil, false), ("Waiting", nil, false),
             ("Awaiting confirmation", "confirm", false), ("Step failed", "confirm", false),
-            ("Outcome unknown", nil, false), ("Ready", "next", true), ("Finished", nil, true),
+            ("Outcome unknown", nil, false), ("Checking route", nil, false),
+            ("Route changed", "restore", false), ("Ready", "next", true), ("Finished", nil, true),
         ]
         for (index, (status, command, canGoBack)) in states.enumerated() {
             var state: [String: Any] = ["status": status, "channel": "Native check", "step": "3/5",
@@ -448,21 +500,27 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
             guard let data = try? JSONSerialization.data(withJSONObject: state) else { exit(13) }
             do { try data.write(to: session.appendingPathComponent("panel.json")) } catch { exit(13) }
             refresh()
-            let centerAction = command == "start" || command == "confirm"
-            guard back.isEnabled == canGoBack, startOrConfirm.isEnabled == centerAction,
-                  startOrConfirm.isHidden != centerAction, next.isEnabled == (command == "next"), stop.isEnabled,
+            content.layoutSubtreeIfNeeded()
+            guard back.isEnabled == canGoBack, start.isEnabled == (command == "start"), start.title == "Start",
+                  stateButton.isEnabled == (command == "confirm" || command == "restore"),
+                  stateButton.frame.size == stateSize, buttons.allSatisfy({ !$0.isHidden }),
+                  next.isEnabled == (command == "next"), stop.isEnabled,
                   cue.string.contains("Updated narration"), cue.string.contains("Current step detail"),
                   narrationSize() == fontSize, self.status.stringValue.hasPrefix(status),
                   notes.frame == retainedFrame else { exit(13) }
-            if command == "start" || status == "Awaiting confirmation" {
+            if command == "start" {
                 forward()
-                startOrConfirm.performClick(nil)
+                start.performClick(nil)
+            }
+            if status == "Awaiting confirmation" || command == "restore" {
+                forward()
+                stateButton.performClick(nil)
             }
         }
         guard buttons.allSatisfy({ $0.refusesFirstResponder }) else { exit(14) }
         let tipState: [String: Any] = ["status": "Ready", "channel": "Native check", "step": "4/5",
             "role": "Presenter", "title": "Tip", "say": "Narration.", "wait": "Copilot's reply",
-            "detail": "", "generation": 9, "primary": "next", "can_previous": true]
+            "detail": "", "generation": states.count + 1, "primary": "next", "can_previous": true]
         guard let tipData = try? JSONSerialization.data(withJSONObject: tipState) else { exit(15) }
         do { try tipData.write(to: session.appendingPathComponent("panel.json")) } catch { exit(15) }
         refresh()
@@ -477,8 +535,11 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
     @objc func previous() {
         if let frame, frame.canPrevious { send("previous \(frame.generation)") }
     }
-    @objc func performPrimary() {
-        if let frame, let command = frame.primary, command == "start" || command == "confirm" {
+    @objc func startScenario() {
+        if let frame, frame.primary == "start" { send("start \(frame.generation)") }
+    }
+    @objc func performStateAction() {
+        if let frame, let command = frame.primary, command == "confirm" || command == "restore" {
             send("\(command) \(frame.generation)")
         }
     }
@@ -502,14 +563,21 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
             cue.scrollRangeToVisible(NSRange(location: 0, length: 0))
         }
         back.isEnabled = state.canPrevious
-        let confirming = state.primary == "confirm"
-        startOrConfirm.isEnabled = state.primary == "start" || confirming
-        startOrConfirm.isHidden = !startOrConfirm.isEnabled
-        startOrConfirm.title = confirming ? "Confirm" : "Start"
-        startOrConfirm.image = NSImage(systemSymbolName: confirming ? "checkmark" : "play.fill",
-                                       accessibilityDescription: nil)
-        startOrConfirm.setAccessibilityLabel(confirming ? "Confirm completion" : "Start scenario")
+        start.isEnabled = state.primary == "start"
         next.isEnabled = state.primary == "next"
+        stateButton.isEnabled = state.primary == "confirm" || state.primary == "restore"
+        let (caption, symbol): (String, String) = switch (state.primary, state.status) {
+        case ("restore", _): ("Check route", "arrow.clockwise")
+        case (_, "Checking route"): ("Checking", "magnifyingglass")
+        case (_, "Waiting"): ("Waiting", "hourglass")
+        case (_, "Working"), (_, "Preparing"): ("Working", "hourglass")
+        case (_, "Outcome unknown"), (_, "Preparation failed"), (_, "Preview failed"), (_, "Session expired"):
+            ("Blocked", "lock")
+        default: ("Confirm", "checkmark")
+        }
+        stateButton.title = caption
+        stateButton.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        stateButton.setAccessibilityLabel(caption == "Confirm" ? "Confirm completion" : caption)
     }
     func installKeys() {
         let callback: EventHandlerUPP = { _, event, pointer in
