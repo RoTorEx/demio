@@ -29,14 +29,19 @@ folder remains openable in Finder. These actions never execute the adapter.
 
 ## Creating a demo with an agent
 
-`demio init ~/.toolbelt/demio/demos/my-demo` creates the whole structure, including two local browser
-variants, one shared adapter, AGENTS.md and README.md. Give the agent this demo
-folder. AGENTS.md requires it to explain terminology and controls, discuss the
+`demio init ~/.toolbelt/demio/demos/my-demo` creates the whole structure, with
+four live browser rehearsals, a Mac file walkthrough, and their shared adapters.
+Give the agent the demo folder with its AGENTS.md and README.md.
+AGENTS.md requires it to explain terminology and controls, discuss the
 audience, intended result, variants, environment, data, allowed writes/budgets,
 language and recording needs, then propose a concrete brief and agree unresolved
 choices before implementing behavior. The README retains the agreed brief.
 Existing decisions stay in effect; routine implementation choices do not need
 repeated approval. See [the authoring instructions](../templates/demo/AGENTS.md).
+
+Use the four generated browser rehearsals for live presentations. The original
+`examples/browser/channel.json` remains at its historical path for existing
+source-checkout registrations and browser interaction tests.
 
 ## Demo defaults and scenario differences
 

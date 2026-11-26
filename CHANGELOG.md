@@ -8,12 +8,13 @@
   after timeouts or invalid replies. Discard stale panel commands.
 - Generate live Wikipedia, Wikidata and IANA rehearsals for tabs, timers,
   downloads, confirmation and recovery, plus a Mac file walkthrough.
-
+- Show introductions, ordered steps and confirmation cues in the two-pane
+  scenario chooser. Enter opens the presenter before preparation.
+- Wait for the cleanup reply when stopping and terminate an active adapter
+  when the session expires.
 - Open the presenter panel with 11-point notes and a 360 × 240 point content
   area. The font controls support 9–48 points and use the presenter’s saved size
   when available.
-- Serve the standalone browser example's assets from beside its adapter and
-  verify the page during preparation.
 
 ## [0.1.16] - 2026-11-18
 

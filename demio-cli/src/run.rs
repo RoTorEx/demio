@@ -1,5 +1,5 @@
 use crate::{
-    protocol::{Event, Rejected, Worker},
+    protocol::{Event, Rejected, SessionExpired, Worker},
     registry::{Channel, atomic_write},
 };
 use anyhow::{Context, Result, bail};
@@ -204,7 +204,7 @@ pub fn doctor(channel: &Channel, manifest: &Path, cancelled: &AtomicBool) -> Res
     let scratch = Scratch::new()?;
     let worker = Worker::start(channel, manifest, &scratch.0)?;
     worker.send("check", None, 30)?;
-    let result = worker.wait(cancelled);
+    let result = worker.wait(cancelled, None);
     worker.cleanup();
     result?;
     println!("Ready: {} [{}]", channel.name, channel.id);
@@ -593,12 +593,15 @@ fn auto_run(
     let result = (|| -> Result<()> {
         println!("Preparing {} [{}]…", channel.name, channel.id);
         worker.send("prepare", None, channel.steps[0].timeout_seconds)?;
-        worker.wait(cancelled)?;
+        worker.wait(cancelled, None)?;
         prepared = true;
         let deadline = Instant::now() + Duration::from_secs(channel.session_seconds);
         for (index, step) in channel.steps.iter().enumerate() {
-            if cancelled.load(Ordering::Relaxed) || Instant::now() >= deadline {
+            if cancelled.load(Ordering::Relaxed) {
                 bail!("Session stopped before next step");
+            }
+            if Instant::now() >= deadline {
+                return Err(SessionExpired.into());
             }
             println!(
                 "{}/{}  {}  {}\n{}",
@@ -609,13 +612,19 @@ fn auto_run(
                 step.say
             );
             worker.send("run", Some(&step.id), step.timeout_seconds)?;
-            worker.wait(cancelled)?;
+            worker.wait(cancelled, Some(deadline))?;
             position.finish(index, true);
             journal(channel, &position, "Ready");
         }
         Ok(())
     })();
-    worker.cleanup();
+    if !result
+        .as_ref()
+        .is_err_and(|error| error.is::<SessionExpired>())
+    {
+        worker.cleanup();
+    }
+    drop(worker);
     let (status, outcome) = if result.is_ok() {
         ("Finished", "success")
     } else if cancelled.load(Ordering::Relaxed) {
@@ -677,7 +686,7 @@ pub fn run(
         &terminal_text(&channel, &presenter.display(&channel)),
         theme,
     )?;
-    let mut worker = None;
+    let mut worker: Option<Worker> = None;
     while !cancelled.load(Ordering::Relaxed) {
         let frame = presenter.display(&channel);
         let encoded = serde_json::to_vec(&frame)?;
@@ -694,11 +703,17 @@ pub fn run(
             break;
         }
         if presenter.deadline.is_some_and(|end| Instant::now() >= end) {
+            let in_flight = matches!(presenter.phase, Phase::Working(_));
             presenter.blocked(
                 presenter.index(),
                 "Session expired",
-                "The scenario reached its time limit. Stop and inspect the application.",
+                SessionExpired.to_string(),
             );
+            if let Some(expired) = worker.take() {
+                if !in_flight {
+                    expired.cleanup();
+                }
+            }
             continue;
         }
         if action.is_some() && action == presenter.primary(total) {
@@ -761,6 +776,7 @@ pub fn run(
                         presenter.waiting = waiting;
                     }
                     Event::Done(result) => presenter.finish_work(&channel, worker, work, result),
+                    Event::CleanupComplete => (),
                 }
             }
         }

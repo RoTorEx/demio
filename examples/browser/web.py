@@ -49,12 +49,15 @@ class Walkthrough:
         else:
             first = self.parameters.get("pages", [{}])[0]
             self.open_page(self.page, first.get("url", ARTICLE), first.get("heading", "Ada Lovelace"))
+            self.article_url = self.page.evaluate("location.href.split('#')[0]")
 
     def section(self, fragment):
         self.page.bring_to_front()
+        if self.page.evaluate("location.href.split('#')[0]") != self.article_url:
+            raise RuntimeError("Return to the expected Wikipedia article before selecting its section.")
         self.page.locator(f'a[href="{fragment}"]:visible').first.click(timeout=10000)
         self.page.locator(fragment).wait_for(state="visible", timeout=10000)
-        if self.page.evaluate("location.hash") != fragment:
+        if self.page.evaluate("location.href") != self.article_url + fragment:
             raise RuntimeError(f"The article did not open section {fragment}.")
 
     def navigation(self, step):
@@ -110,7 +113,7 @@ class Walkthrough:
     def check_work(self):
         # Read the live document after the presenter may have used the browser
         # while the adapter was idle.
-        if self.page.evaluate("location.hash") != "#Work":
+        if self.page.evaluate("location.href") != self.article_url + "#Work":
             raise RuntimeError("Work is not open. Select Work in the article contents and verify the heading.")
 
     def article_event(self, request):
@@ -119,7 +122,9 @@ class Walkthrough:
             self.section("#Biography")
         elif step == "await-work":
             respond(request, "status", waiting=True, detail="Waiting for the article’s Work link.")
-            self.page.wait_for_function("location.hash === '#Work'", timeout=30000)
+            self.page.wait_for_function(
+                "(url) => location.href === url", arg=self.article_url + "#Work", timeout=30000
+            )
         elif step == "check-work":
             self.check_work()
         elif step == "read-work":

@@ -21,7 +21,9 @@ with tempfile.TemporaryDirectory(dir=base) as temporary:
         return result
     adapter = root/'adapter.py'
     adapter.write_text('''import json,sys,time
+import os
 from pathlib import Path
+parameters = json.loads(os.environ.get("DEMIO_PARAMETERS", "{}"))
 for line in sys.stdin:
  r=json.loads(line)
  with Path("actions.log").open("a") as stream: stream.write(r["op"]+":"+str(r["step"])+"\\n")
@@ -30,6 +32,15 @@ for line in sys.stdin:
   time.sleep(3)
   print(json.dumps({"id":r["id"],"event":"done","ok":True}),flush=True)
  elif r["op"]=="run" and r["step"]=="wrong": print(json.dumps({"id":999,"event":"done","ok":True}),flush=True)
+ elif r["op"]=="run" and "delay" in parameters:
+  print(json.dumps({"id":r["id"],"event":"status","waiting":True,"detail":"Interruptible operation in progress."}),flush=True)
+  time.sleep(parameters["delay"])
+  Path("pending-finished").touch()
+  print(json.dumps({"id":r["id"],"event":"done","ok":True}),flush=True)
+ elif r["op"]=="cleanup" and "delay" in parameters:
+  time.sleep(.35)
+  Path("cleanup-finished").touch()
+  print(json.dumps({"id":r["id"],"event":"done","ok":True}),flush=True)
  else: print(json.dumps({"id":r["id"],"event":"done","ok":True}),flush=True)
  if r["op"]=="cleanup": break
 ''')
@@ -214,6 +225,39 @@ for line in sys.stdin:
     finally:
         if interactive.poll() is None: interactive.kill();interactive.wait()
         os.close(master)
+    # Stop allows a short pending operation and its own cleanup to finish. The hard
+    # session deadline terminates a longer operation instead of accepting its late result.
+    for identity, session_seconds, delay in [('stoppable', 20, .65), ('expired', 1, 2.4)]:
+        path=manifest(identity, ['pending', 'never'])
+        data=json.loads(path.read_text())
+        data['session_seconds']=session_seconds
+        data['parameters']={'delay':delay}
+        data['steps'][0]['timeout_seconds']=5
+        path.write_text(json.dumps(data))
+        cli('register',str(path))
+        (root/'actions.log').write_text('')
+        for marker in ['pending-finished', 'cleanup-finished']:
+            (root/marker).unlink(missing_ok=True)
+        master, slave=pty.openpty()
+        interactive=subprocess.Popen([binary,'run',identity,'--no-overlay'],stdin=slave,stdout=slave,stderr=slave,env=env)
+        os.close(slave)
+        try:
+            wait_text('Start scenario prepares the demo.')
+            os.write(master,b's');wait_text('Setup complete.')
+            os.write(master,b'\x1b[20~');wait_text('Interruptible operation in progress.')
+            if identity=='expired':
+                wait_text('Session expired')
+            os.write(master,b'q')
+            assert (interactive.wait(timeout=5)==0) == (identity=='stoppable')
+            assert (root/'pending-finished').exists() == (identity=='stoppable')
+            assert (root/'cleanup-finished').exists() == (identity=='stoppable')
+            assert 'run:never' not in (root/'actions.log').read_text()
+            assert not list((root/'runtime').iterdir())
+        finally:
+            if interactive.poll() is None: interactive.kill();interactive.wait()
+            os.close(master)
+    assert 'time limit' in cli('run','expired','--auto',ok=False).stderr
+    assert not (root/'pending-finished').exists()
     for failure in ['fail','timeout','wrong']:
         cli('register',str(manifest(failure,[failure,'never'])))
         result=cli('run',failure,'--auto',ok=False)

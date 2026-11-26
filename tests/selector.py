@@ -83,14 +83,16 @@ for line in sys.stdin:
         finish(process, master)
     (root/'demo.json').write_text(json.dumps({'schema_version':1,'id':'example','name':'Example demo','description':'Shared selector components','scenarios':['scenarios/first/scenario.json','scenarios/second/scenario.json']}))
     for day, identity in [(1, 'first'), (2, 'second')]:
-        channel = {'schema_version':1, 'demo':'../../demo.json', 'id':identity, 'name':identity.title()+' demonstration', 'project':'Example', 'description':'A local selector check', 'created_at':f'2026-01-0{day}T12:00:00+01:00', 'adapter':[sys.executable, '-u', str(adapter)], 'steps':[{'id':identity+'-step', 'title':identity+' step', 'role':'Presenter', 'say':'Read this'}]}
+        channel = {'schema_version':1, 'demo':'../../demo.json', 'id':identity, 'name':identity.title()+' demonstration', 'project':'Example', 'description':'A local selector check', 'intro':f'Welcome to the {identity} scenario.', 'created_at':f'2026-01-0{day}T12:00:00+01:00', 'adapter':[sys.executable, '-u', str(adapter)], 'steps':[{'id':identity+'-step', 'title':identity+' step', 'role':'Presenter', 'say':'Read this', 'wait':'Wait for the visible result.', 'confirm':identity=='second'}]}
         manifest = root/f'scenarios/{identity}/scenario.json'
         manifest.parent.mkdir(parents=True, exist_ok=True)
         manifest.write_text(json.dumps(channel))
         subprocess.run([str(binary), 'register', str(manifest)], env=env, check=True, capture_output=True)
     process, master = start()
     try:
-        wait_text(master, 'Details')
+        wait_text(master, 'Welcome to the second scenario.')
+        # A third-party adapter stays dormant while the cue and wait guidance are visible.
+        assert not (root/'actions.log').exists()
         os.write(master, b'e')
         wait_text(master, 'Opened scenario folder')
         os.write(master, b'f')

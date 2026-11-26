@@ -9,6 +9,7 @@ use std::{
     process::{Child, ChildStdin, Command, Stdio},
     sync::{
         Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
         mpsc::{self, Receiver, Sender},
     },
     thread::{self, JoinHandle},
@@ -18,7 +19,19 @@ use std::{
 pub enum Event {
     Progress { detail: String, waiting: bool },
     Done(Result<Value>),
+    CleanupComplete,
 }
+
+#[derive(Debug)]
+pub struct SessionExpired;
+
+impl std::fmt::Display for SessionExpired {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("The scenario reached its time limit. Inspect the application.")
+    }
+}
+
+impl std::error::Error for SessionExpired {}
 
 #[derive(Debug)]
 pub struct Rejected(String);
@@ -49,7 +62,7 @@ struct Adapter {
     session: String,
 }
 impl Adapter {
-    fn call(&mut self, op: Operation, events: &Sender<Event>) -> Result<Value> {
+    fn call(&mut self, op: &Operation, events: &Sender<Event>) -> Result<Value> {
         self.sequence += 1;
         let id = self.sequence;
         serde_json::to_writer(
@@ -68,7 +81,13 @@ impl Adapter {
                 .replies
                 .recv_timeout(left)
                 .context("Adapter stopped responding or timed out; outcome is unknown")??;
-            if reply.get("id").and_then(Value::as_u64) != Some(id) {
+            let reply_id = reply.get("id").and_then(Value::as_u64);
+            if reply_id != Some(id) {
+                // A final reply can arrive after an operation timed out. Only cleanup
+                // can consume such a reply and keep waiting for its own response.
+                if op.op == "cleanup" && reply_id.is_some_and(|received| received < id) {
+                    continue;
+                }
                 bail!("Adapter response ID does not match the active operation");
             }
             match reply.get("event").and_then(Value::as_str) {
@@ -150,7 +169,11 @@ impl Worker {
         let (event_tx, events) = mpsc::channel();
         let handle = thread::spawn(move || {
             while let Ok(operation) = requests.recv() {
-                let result = adapter.call(operation, &event_tx);
+                let result = adapter.call(&operation, &event_tx);
+                if operation.op == "cleanup" {
+                    let _ = event_tx.send(Event::CleanupComplete);
+                    break;
+                }
                 if event_tx.send(Event::Done(result)).is_err() {
                     break;
                 }
@@ -174,14 +197,26 @@ impl Worker {
             })?;
         Ok(())
     }
-    pub fn wait(&self, cancelled: &std::sync::atomic::AtomicBool) -> Result<Value> {
+    pub fn wait(&self, cancelled: &AtomicBool, deadline: Option<Instant>) -> Result<Value> {
         loop {
-            if cancelled.load(std::sync::atomic::Ordering::Relaxed) {
+            if cancelled.load(Ordering::Relaxed) {
                 bail!("Cancelled");
             }
-            match self.events.recv_timeout(Duration::from_millis(100)) {
-                Ok(Event::Done(result)) => return result,
+            let poll = Duration::from_millis(100);
+            let remaining =
+                deadline.map_or(poll, |end| end.saturating_duration_since(Instant::now()));
+            if remaining.is_zero() {
+                return Err(SessionExpired.into());
+            }
+            match self.events.recv_timeout(poll.min(remaining)) {
+                Ok(Event::Done(result)) => {
+                    if deadline.is_some_and(|end| Instant::now() >= end) {
+                        return Err(SessionExpired.into());
+                    }
+                    return result;
+                }
                 Ok(Event::Progress { detail, .. }) => eprintln!("{detail}"),
+                Ok(Event::CleanupComplete) => bail!("Adapter has closed"),
                 Err(mpsc::RecvTimeoutError::Timeout) => (),
                 Err(error) => return Err(error.into()),
             }
@@ -191,11 +226,12 @@ impl Worker {
         if self.send("cleanup", None, 2).is_ok() {
             let end = Instant::now() + Duration::from_secs(2);
             while Instant::now() < end {
-                if matches!(
-                    self.events.recv_timeout(Duration::from_millis(50)),
-                    Ok(Event::Done(_))
-                ) {
-                    break;
+                match self
+                    .events
+                    .recv_timeout(end.saturating_duration_since(Instant::now()))
+                {
+                    Ok(Event::CleanupComplete) | Err(_) => break,
+                    Ok(_) => (),
                 }
             }
         }

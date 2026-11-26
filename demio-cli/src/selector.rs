@@ -11,7 +11,10 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState, Wrap},
+    widgets::{
+        Block, Borders, Cell, Paragraph, Row, Scrollbar, ScrollbarOrientation, ScrollbarState,
+        Table, TableState, Wrap,
+    },
 };
 use std::{
     io,
@@ -140,7 +143,69 @@ fn selected_row(entries: &[Listing], selected: usize) -> usize {
     selected + headers
 }
 
-fn details(config: &Config, entry: &Listing) -> String {
+fn details(config: &Config, entry: &Listing, colors: &Palette) -> Text<'static> {
+    let heading = |label| {
+        Line::styled(
+            label,
+            Style::default()
+                .fg(colors.detail)
+                .add_modifier(Modifier::BOLD),
+        )
+    };
+    let field = |label, value: String| {
+        Line::from(vec![
+            Span::styled(label, Style::default().fg(colors.label)),
+            Span::raw(value),
+        ])
+    };
+    let mut text = Text::from(Line::styled(
+        display_name(entry),
+        Style::default()
+            .fg(colors.project)
+            .add_modifier(Modifier::BOLD),
+    ));
+    let resolved = config.resolve(&entry.id);
+    if let Err(error) = &resolved {
+        text.lines.push(Line::styled(
+            format!("Unavailable: {error:#}"),
+            Style::default().fg(Color::LightRed),
+        ));
+    }
+    let description = entry.description.trim();
+    if !description.is_empty()
+        && !resolved
+            .as_ref()
+            .is_ok_and(|(channel, _)| channel.introduction().trim() == description)
+    {
+        text.lines.push(Line::default());
+        text.lines.extend(Text::raw(description.to_owned()).lines);
+    }
+    if let Ok((channel, _)) = &resolved {
+        text.lines
+            .extend([Line::default(), heading("0  Introduction")]);
+        text.lines
+            .extend(Text::raw(channel.introduction().to_owned()).lines);
+        text.lines.extend([Line::default(), heading("Steps")]);
+        for (index, step) in channel.steps.iter().enumerate() {
+            let confirmation = if step.confirm { " · Confirm" } else { "" };
+            text.lines.push(Line::from(vec![
+                Span::styled(
+                    format!("{}  ", index + 1),
+                    Style::default().fg(colors.label),
+                ),
+                Span::raw(step.title.clone()),
+                Span::styled(
+                    format!(" · {}{confirmation}", step.role),
+                    Style::default().add_modifier(Modifier::DIM),
+                ),
+            ]));
+            if !step.wait.trim().is_empty() {
+                text.lines
+                    .extend(Text::raw(format!("   Wait: {}", step.wait.trim())).lines);
+            }
+        }
+    }
+
     let (date, time) = entry
         .created_at
         .map(|date| {
@@ -151,116 +216,35 @@ fn details(config: &Config, entry: &Listing) -> String {
             )
         })
         .unwrap_or_else(|| ("Unknown".into(), "Unknown".into()));
-    let mut text = format!(
-        "Scenario | Presenter\n\n{}\n\nDescription\n{}\n\nIdentity | Registry\n\nID: {}\nProject: {}\nCreated date: {}\nCreated time: {}\n\nEnvironment | Project adapter\n\nManifest\n{}\n",
-        display_name(entry),
-        if entry.description.trim().is_empty() {
-            "No description provided"
-        } else {
-            &entry.description
-        },
-        entry.id,
-        entry.project,
-        date,
-        time,
-        entry.manifest.display()
-    );
-    if let Some(demo) = &entry.demo {
-        text = format!(
-            "Demo | Shared components\n\n{}\n{}\n\n{}",
-            demo.name, demo.description, text
-        );
-        text = text.replace(
-            "Environment | Project adapter\n\n",
-            &format!(
-                "Environment | Project adapter\n\nDemo folder\n{}\n\n",
-                demo.folder.display()
-            ),
-        );
+    text.lines.extend([
+        Line::default(),
+        heading("Source and settings"),
+        field("ID: ", entry.id.clone()),
+        field("Project: ", entry.project.clone()),
+        field("Created date: ", date),
+        field("Created time: ", time),
+        field("Manifest: ", entry.manifest.display().to_string()),
+    ]);
+    if let Ok((channel, path)) = &resolved {
+        if let Ok(workspace) = channel.workspace_path(path) {
+            text.lines
+                .push(field("Workspace: ", workspace.display().to_string()));
+        }
+        text.lines.push(field(
+            "Session limit: ",
+            format!("{} seconds", channel.session_seconds),
+        ));
     }
-    match config.resolve(&entry.id) {
-        Ok((channel, path)) => {
-            text.push_str(&format!(
-                "\nWorkspace\n{}\n\nExecution | Demio\n\nSession limit: {} seconds\n\nSteps | Project adapter\n\n",
-                channel.workspace_path(&path).unwrap_or_default().display(), channel.session_seconds
-            ));
-            for (index, step) in channel.steps.iter().enumerate() {
-                text.push_str(&format!("{}. {} | {}\n", index + 1, step.title, step.role));
-            }
-        }
-        Err(error) => {
-            text = format!("Unavailable: cannot launch this scenario\n\n{text}");
-            text.push_str(&format!(
-                "\nUnavailable: {error:#}\nRepair the manifest before running this demo."
-            ));
-        }
+    if let Some(demo) = &entry.demo {
+        text.lines.extend([
+            Line::default(),
+            heading("Owning demo"),
+            Line::raw(demo.name.clone()),
+            field("Demo folder: ", demo.folder.display().to_string()),
+        ]);
+        text.lines.extend(Text::raw(demo.description.clone()).lines);
     }
     text
-}
-
-fn styled_details<'a>(detail: &'a str, colors: &Palette) -> Text<'a> {
-    Text::from(
-        detail
-            .lines()
-            .enumerate()
-            .map(|(index, line)| {
-                if line.starts_with("Unavailable:") {
-                    return Line::styled(line, Style::default().fg(Color::LightRed));
-                }
-                if matches!(
-                    line,
-                    "Demo | Shared components"
-                        | "Scenario | Presenter"
-                        | "Identity | Registry"
-                        | "Environment | Project adapter"
-                        | "Execution | Demio"
-                        | "Steps | Project adapter"
-                ) {
-                    return Line::styled(
-                        line,
-                        Style::default()
-                            .fg(colors.detail)
-                            .add_modifier(Modifier::BOLD),
-                    );
-                }
-                if matches!(
-                    line,
-                    "Description" | "Manifest" | "Workspace" | "Demo folder"
-                ) {
-                    return Line::styled(
-                        line,
-                        Style::default()
-                            .fg(colors.label)
-                            .add_modifier(Modifier::BOLD),
-                    );
-                }
-                for label in [
-                    "ID: ",
-                    "Project: ",
-                    "Created date: ",
-                    "Created time: ",
-                    "Session limit: ",
-                ] {
-                    if let Some(value) = line.strip_prefix(label) {
-                        return Line::from(vec![
-                            Span::styled(label, Style::default().fg(colors.label)),
-                            Span::raw(value),
-                        ]);
-                    }
-                }
-                Line::styled(
-                    line,
-                    if index == 0 {
-                        Style::default()
-                            .fg(colors.project)
-                            .add_modifier(Modifier::BOLD)
-                    } else {
-                        Style::default().fg(Color::White)
-                    },
-                )
-            })
-            .collect::<Vec<_>>(),
-    )
 }
 
 fn open_source(entry: &Listing, editor: bool) -> Result<&'static str> {
@@ -312,34 +296,24 @@ fn open_source(entry: &Listing, editor: bool) -> Result<&'static str> {
 }
 
 fn panes(area: Rect) -> [Rect; 2] {
-    let regions =
-        Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(area);
-    [regions[0], regions[1]]
-}
-
-fn max_scroll(detail: &str, area: Rect) -> u16 {
-    let lines = Paragraph::new(detail)
-        .wrap(Wrap { trim: false })
-        .line_count(area.width.saturating_sub(2).max(1));
-    lines
-        .saturating_sub(area.height.saturating_sub(2) as usize)
-        .min(u16::MAX as usize) as u16
+    let list_width = (area.width / 5 * 2).clamp(30, 46).min(area.width / 2);
+    Layout::horizontal([Constraint::Length(list_width), Constraint::Min(0)]).areas(area)
 }
 
 fn draw(
     frame: &mut Frame,
     entries: &[Listing],
     state: &mut TableState,
-    detail: &str,
-    scroll: u16,
-    theme: &str,
+    detail: &Text<'_>,
+    scroll: &mut u16,
+    colors: &Palette,
     message: &str,
 ) {
     let area = frame.area();
-    let regions = Layout::vertical([Constraint::Min(0), Constraint::Length(2)]).split(area);
+    let footer_height = if message.is_empty() { 2 } else { 3 };
+    let regions =
+        Layout::vertical([Constraint::Min(0), Constraint::Length(footer_height)]).split(area);
     let panes = panes(regions[0]);
-    let scroll = scroll.min(max_scroll(detail, panes[1]));
-    let colors = palette(theme);
     let has_demos = entries.iter().any(|entry| entry.demo.is_some());
     let mut rows = Vec::new();
     for (index, entry) in entries.iter().enumerate() {
@@ -380,19 +354,6 @@ fn draw(
             )),
         ]));
     }
-    let demo_count = entries
-        .iter()
-        .filter_map(|entry| entry.demo.as_ref().map(|demo| &demo.manifest))
-        .collect::<std::collections::HashSet<_>>()
-        .len();
-    let title = if has_demos {
-        format!(
-            " Demio | Demos: {demo_count} | Scenarios: {} ",
-            entries.len()
-        )
-    } else {
-        format!(" Demio | Scenarios: {} ", entries.len())
-    };
     let table = Table::new(rows, [Constraint::Length(10), Constraint::Min(0)])
         .column_spacing(3)
         .style(Style::default().fg(colors.project))
@@ -404,7 +365,7 @@ fn draw(
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(title)
+                .title(format!(" Demio · {} scenarios ", entries.len()))
                 .border_style(Style::default().fg(colors.list)),
         )
         .row_highlight_style(
@@ -415,31 +376,48 @@ fn draw(
         )
         .highlight_symbol("› ");
     frame.render_stateful_widget(table, panes[0], state);
-    if entries.is_empty() {
-        frame.render_widget(
-            Paragraph::new("No demos registered.\nUse demio register FILE.")
-                .block(Block::default().borders(Borders::ALL).title(" Details ")),
-            panes[1],
-        );
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Details ")
+        .border_style(Style::default().fg(colors.detail));
+    let details_area = block.inner(panes[1]);
+    let paragraph = if entries.is_empty() {
+        Paragraph::new("No demos registered.\nUse demio register FILE.")
     } else {
-        frame.render_widget(
-            Paragraph::new(styled_details(detail, &colors))
-                .wrap(Wrap { trim: false })
-                .scroll((scroll, 0))
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .title(" Details ")
-                        .border_style(Style::default().fg(colors.detail)),
-                ),
-            panes[1],
-        );
+        Paragraph::new(detail.clone())
     }
+    .wrap(Wrap { trim: false });
+    let overflow = paragraph
+        .line_count(details_area.width.max(1))
+        .saturating_sub(usize::from(details_area.height));
+    *scroll = (*scroll).min(overflow.min(usize::from(u16::MAX)) as u16);
+    frame.render_widget(paragraph.scroll((*scroll, 0)).block(block), panes[1]);
+    if overflow > 0 && !details_area.is_empty() {
+        let track = Rect::new(
+            panes[1].x,
+            details_area.y,
+            panes[1].width,
+            details_area.height,
+        );
+        let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(None)
+            .end_symbol(None)
+            .track_symbol(None)
+            .thumb_style(Style::default().fg(colors.detail));
+        let mut position = ScrollbarState::new(overflow + 1).position(usize::from(*scroll));
+        frame.render_stateful_widget(scrollbar, track, &mut position);
+    }
+    let primary = if area.width >= 73 {
+        "↑/↓ or j/k Select · Enter Open presenter · PgUp/PgDn Details · q/Esc Quit"
+    } else {
+        "↑↓ Select · Enter Open · PgUp/PgDn Details · Esc Quit"
+    };
     frame.render_widget(
-        Paragraph::new(format!(
-            "↑/↓ or j/k Select · Enter Open · d Rehearse · PgUp/PgDn Details · q/Esc Quit\ne VS Code · f Finder   {message}"
-        ))
-        .style(Style::default().fg(Color::Gray)),
+        Paragraph::new(vec![
+            Line::styled(primary, Style::default().fg(colors.label)),
+            Line::raw("d Rehearse · e VS Code · f Finder"),
+            Line::styled(message, Style::default().add_modifier(Modifier::BOLD)),
+        ]),
         regions[1],
     );
 }
@@ -452,9 +430,10 @@ pub fn choose(config: &Config, cancelled: &AtomicBool) -> Result<Option<(String,
     let mut selected: usize = 0;
     let mut scroll = 0u16;
     let mut message = String::new();
+    let colors = palette(&config.theme);
     let mut detail = entries
         .first()
-        .map(|entry| details(config, entry))
+        .map(|entry| details(config, entry, &colors))
         .unwrap_or_default();
     terminal::enable_raw_mode()?;
     let _restore = Restore;
@@ -470,8 +449,8 @@ pub fn choose(config: &Config, cancelled: &AtomicBool) -> Result<Option<(String,
                 &entries,
                 &mut state,
                 &detail,
-                scroll,
-                &config.theme,
+                &mut scroll,
+                &colors,
                 &message,
             )
         })?;
@@ -494,13 +473,7 @@ pub fn choose(config: &Config, cancelled: &AtomicBool) -> Result<Option<(String,
                 }
                 KeyCode::Home => selected = 0,
                 KeyCode::End => selected = entries.len().saturating_sub(1),
-                KeyCode::PageDown => {
-                    let size = terminal.size()?;
-                    let area = Rect::new(0, 0, size.width, size.height.saturating_sub(2));
-                    scroll = scroll
-                        .saturating_add(5)
-                        .min(max_scroll(&detail, panes(area)[1]));
-                }
+                KeyCode::PageDown => scroll = scroll.saturating_add(5),
                 KeyCode::PageUp => scroll = scroll.saturating_sub(5),
                 KeyCode::Char(key @ ('e' | 'f')) if !entries.is_empty() => {
                     message = match open_source(&entries[selected], key == 'e') {
@@ -523,7 +496,7 @@ pub fn choose(config: &Config, cancelled: &AtomicBool) -> Result<Option<(String,
             }
             if previous != selected {
                 state.select(Some(selected_row(&entries, selected)));
-                detail = details(config, &entries[selected]);
+                detail = details(config, &entries[selected], &colors);
                 scroll = 0;
                 message.clear();
             }
@@ -555,9 +528,21 @@ mod tests {
         for (width, height) in [(140, 30), (80, 30), (60, 30)] {
             let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
             let mut state = TableState::default().with_selected(Some(59));
-            let detail = details(&Config::default(), &entries[59]);
+            let colors = palette("ocean");
+            let detail = details(&Config::default(), &entries[59], &colors);
+            let mut scroll = 0;
             terminal
-                .draw(|frame| draw(frame, &entries, &mut state, &detail, 0, "ocean", ""))
+                .draw(|frame| {
+                    draw(
+                        frame,
+                        &entries,
+                        &mut state,
+                        &detail,
+                        &mut scroll,
+                        &colors,
+                        "",
+                    )
+                })
                 .unwrap();
             let buffer = terminal.backend().buffer();
             let areas = panes(Rect::new(0, 0, width, height - 2));
@@ -595,8 +580,19 @@ mod tests {
             assert!(detail.contains("Details"));
             assert_eq!(areas[0].y, areas[1].y);
             assert!(areas[0].right() <= areas[1].x);
+            assert!(areas[0].width <= 46 && areas[1].width >= areas[0].width);
             terminal
-                .draw(|frame| draw(frame, &[], &mut TableState::default(), "", 0, "calm", ""))
+                .draw(|frame| {
+                    draw(
+                        frame,
+                        &[],
+                        &mut TableState::default(),
+                        &Text::default(),
+                        &mut scroll,
+                        &colors,
+                        "",
+                    )
+                })
                 .unwrap();
             let content: String = terminal
                 .backend()

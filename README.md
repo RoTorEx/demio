@@ -98,13 +98,13 @@ before adapting it. Registration accepts demo.json (all declared scenarios) or a
 single scenario JSON. Run and doctor use a stable **scenario ID** printed by list.
 Legacy standalone manifests remain supported.
 
-The two-pane TUI shows demo headers with their scenarios on the left and
-separate demo/scenario details on the right. Dates retain the year; names use
-` | `, with colors following GTD roles. ↑/↓ or j/k selects a scenario. Enter opens
-its presenter and d opens a dry rehearsal. PgUp/PgDn scrolls details; e opens the owning demo root and selected scenario
-in VS Code; f reveals the scenario in Finder; q/Esc quits. Panes stay side by
-side. Non-terminal output remains a plain list; list --json includes demo
-identity and paths. Empty/unavailable states stay visible without running code.
+The two-pane TUI shows grouped scenarios and creation dates on the left. The
+right pane previews the introduction, step order, wait and confirmation cues,
+then shows source paths and settings. ↑/↓ or j/k changes selection. Enter opens
+the presenter at step zero, and d opens a dry rehearsal. PgUp/PgDn scrolls the
+right pane. Press e to open the demo root and scenario in VS Code, f to reveal
+the scenario in Finder, or q/Esc to quit. Non-terminal output remains a plain
+list. `demio list --json` includes stable IDs and source paths.
 
 `demo.json` owns shared defaults. Scenario overrides are resolved on launch.
 `parameters` merge by key and reach the adapter as JSON in `DEMIO_PARAMETERS`;
@@ -123,7 +123,7 @@ See [Editing demos and scenarios](docs/scenarios.md) and the
 
 ## Controls and speaker notes
 
-Selecting a scenario opens one movable presenter window on step **0**, the
+Pressing Enter on a scenario opens one movable presenter window on step **0**, the
 introduction. **Start scenario** opens the adapter and prepares its windows and
 data. Once preparation succeeds the presenter shows the distinct first step.
 **Next** starts that step. The panel shows the current role, step, status and

@@ -94,24 +94,17 @@ fall back to filesystem creation time, which is an approximation for copied or
 checked-out files. Unavailable manifests use the last registered metadata snapshot.
 Metadata tests cover date order, edits, missing manifests, and summer/winter time.
 
-The interactive selector follows GTD's two-pane TUI: demo headers group scenarios
-in a scrollable list containing
-Warsaw creation date and name, clipped to fit; IDs appear only in details. The
-detail pane groups information by scope and owner: demo/shared components, scenario/Presenter (name and
-description), identity/Registry (ID, project, separate creation date and time),
-environment/Project adapter (manifest and workspace), execution/Demio (session
-limit), and steps/Project adapter (step titles and roles). Blank lines separate
-groups and path fields. Theme roles distinguish list/detail borders, headings,
-labels, dates, names, errors, and selection, following GTD palettes. The list
-retains the creation year and leaves three columns between date and name.
-Displayed TUI names use ` | ` between name segments, without rewriting source
-names or stored IDs. Selection updates
-details without invoking adapters. Long cells are clipped, with full text in the
-details pane. PageUp/PageDown scroll details; unavailable demos display their
-error and cannot launch. An empty registry still opens the TUI with registration
-guidance. The panels always sit side by side, list left and details right,
-including narrow terminals. Existing stable IDs are preserved. Newest-first ordering and
-exact run IDs remain unchanged. Non-terminal output stays scriptable.
+The selector shows grouped scenarios on the left and details on the right, even
+in narrow terminals. The list keeps the Warsaw creation year and a three-column
+gap between date and name. It uses ` | ` between name segments for display.
+Wider terminals give extra space to the details pane. It shows the full title,
+description, step-zero cue and ordered steps with wait and confirmation cues.
+Stable ID, project, creation time, source paths and session limit follow below.
+PageUp/PageDown scroll details. Unavailable scenarios place the error beside the
+title and refuse to open. An empty registry shows registration guidance.
+Theme roles distinguish the two panes, headings, dates and the current selection.
+Selection previews the manifest. Enter opens its presenter at step zero.
+Non-terminal output stays scriptable.
 The selector opens the selected manifest and owning demo root in VS Code with
 e, or reveals the file in Finder with f. These inspection actions never invoke
 adapters. Invalid manifests remain openable; Finder can open a surviving parent
@@ -178,10 +171,10 @@ Defaults: 7,200 seconds per interactive session (two-hour rehearsal), 120 second
 per operation (normal browser operations plus load margin). Manifest limits are
 1–86,400 session seconds and 1–3,600 operation seconds, permitting long rehearsals
 while rejecting zero/unbounded waits. Session time begins after preparation.
-Interactive navigation is locked when the session expires; scripted
-`--auto` checks the session deadline between operations and uses operation limits
-while waiting. Preparation uses the first step's timeout. Cleanup has a two-second
-grace before the owned process group is terminated. These are local operational
+Session expiry locks navigation and terminates an in-flight adapter in both
+interactive and scripted runs. Preparation uses the first step's timeout.
+Stopping allows up to two seconds for the adapter's cleanup reply before Demio
+terminates its process group. These are local operational
 limits, never an authorization or money limit. Changing them affects interruption
 and recovery; CLI timeout/failure tests protect the blocking boundary.
 
@@ -220,7 +213,8 @@ endpoint, and generic AI-driven application control remain outside this first mi
 - `demio-overlay/Overlay.swift`: controls, movable/resizable speaker notes.
 - `docs/scenarios.md`: scenario structure and manual editing workflow.
 - `docs/contracts/adapter.md`: project-agent integration and protocol.
-- `examples/browser`: local browser walkthrough.
+- `examples/browser`: live Wikipedia, Wikidata and IANA rehearsals.
+- `examples/mac`: Terminal and TextEdit file rehearsal.
 - `scripts`, `.github/workflows`: packaging, installation, releases.
 
 ## Local product usage evidence

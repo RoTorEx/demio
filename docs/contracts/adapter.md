@@ -98,9 +98,11 @@ malformed JSON, EOF and timeouts leave the outcome unknown. The presenter can
 inspect and stop the session before starting a fresh run.
 
 Keep browsers and application state in the persistent process. Store disposable
-profiles in the session directory. Do not detach/daemonize children. Demio sends
-cleanup, then terminates the adapter's process group on exit. Releasing external
-resources and budgets remains the adapter's responsibility. `--auto` deliberately
+profiles in the session directory. Do not detach or daemonize children. Stop
+gives the adapter up to two seconds to reply to cleanup before Demio terminates
+its process group. If the session limit expires during an action, Demio terminates
+the process group immediately. The adapter owns release of external resources
+and budgets. `--auto` deliberately
 executes all automatic steps; any confirmation requirement refuses the scripted
 run before preparation. `--dry-run` sends only `rehearse` and `cleanup` after
 explicit Start, and an
