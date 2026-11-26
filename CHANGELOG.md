@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-26
+
 - Reverse the terminal's default colors for the selected row. Give scenario
   names more room and show creation dates in Details.
 - Move presenter font size and alignment into a gear popover. Separate spoken
