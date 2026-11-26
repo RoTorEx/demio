@@ -199,14 +199,14 @@ impl Worker {
     }
     pub fn wait(&self, cancelled: &AtomicBool, deadline: Option<Instant>) -> Result<Value> {
         loop {
-            if cancelled.load(Ordering::Relaxed) {
-                bail!("Cancelled");
-            }
             let poll = Duration::from_millis(100);
             let remaining =
                 deadline.map_or(poll, |end| end.saturating_duration_since(Instant::now()));
             if remaining.is_zero() {
                 return Err(SessionExpired.into());
+            }
+            if cancelled.load(Ordering::Relaxed) {
+                bail!("Cancelled");
             }
             match self.events.recv_timeout(poll.min(remaining)) {
                 Ok(Event::Done(result)) => {
@@ -222,9 +222,14 @@ impl Worker {
             }
         }
     }
-    pub fn cleanup(&self) {
+    pub fn cleanup(&self, deadline: Option<Instant>) {
+        let now = Instant::now();
+        let grace = now + Duration::from_secs(2);
+        let end = deadline.map_or(grace, |deadline| deadline.min(grace));
+        if end <= now {
+            return;
+        }
         if self.send("cleanup", None, 2).is_ok() {
-            let end = Instant::now() + Duration::from_secs(2);
             while Instant::now() < end {
                 match self
                     .events

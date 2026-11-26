@@ -71,7 +71,7 @@ class Walkthrough:
         elif step == "return":
             self.section("#Biography")
             if self.context.pages != [self.page, self.data_tab]:
-                raise RuntimeError("The two expected tabs are no longer available in order.")
+                raise RuntimeError("The two expected walkthrough tabs are no longer available.")
         else:
             raise RuntimeError(f"Unknown navigation step: {step}")
 

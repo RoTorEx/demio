@@ -12,9 +12,10 @@ owns a route, introduction, ordered steps, narration and parameter overrides.
 | IANA download, timer and confirmation | Open the published release, wait for the reading timer, then verify the data archive downloaded from IANA. Confirm and use Next to return to release history. |
 | Wikipedia late navigation and stop | Leave Biography open until Outcome unknown. Click Work on Wikipedia and observe that the presenter is still blocked. Use Stop. |
 | Wikipedia manual recovery | Open Work in Wikipedia's contents when the expected-section check fails. Verify the heading, confirm and continue. |
-| Mac file walkthrough | Create a unique text file in Terminal, append a line, and open the document in TextEdit. |
+| Mac file walkthrough | Create a unique text file in Terminal, append a line, open the document in TextEdit and confirm that both lines are visible. |
 
-The public routes need internet access. The Mac route defaults to `~/Desktop`.
+The public routes need internet access. Keep the demonstration tabs in their
+original order. The Mac route defaults to `~/Desktop`.
 Set `parameters.directory` in `scenarios/mac-file/scenario.json` to choose an
 existing writable folder. macOS may request Automation access for Terminal. The
 finished document remains in the chosen folder.

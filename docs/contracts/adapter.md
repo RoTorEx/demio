@@ -100,8 +100,8 @@ inspect and stop the session before starting a fresh run.
 Keep browsers and application state in the persistent process. Store disposable
 profiles in the session directory. Do not detach or daemonize children. Stop
 gives the adapter up to two seconds to reply to cleanup before Demio terminates
-its process group. If the session limit expires during an action, Demio terminates
-the process group immediately. The adapter owns release of external resources
+its process group. The session limit bounds this grace period when the action's
+outcome is pending or unknown. The adapter owns release of external resources
 and budgets. `--auto` deliberately
 executes all automatic steps; any confirmation requirement refuses the scripted
 run before preparation. `--dry-run` sends only `rehearse` and `cleanup` after

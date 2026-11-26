@@ -191,7 +191,8 @@ demio
 ```
 
 The generated README describes each route, the intentional timeout and error,
-and the Mac file walkthrough. The latter uses the desktop by default. To choose
+and the Mac file walkthrough. The latter uses the desktop by default and asks
+the presenter to confirm that both lines are visible in TextEdit. To choose
 a different destination, set `parameters.directory` in
 `scenarios/mac-file/scenario.json` to an existing writable folder.
 

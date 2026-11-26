@@ -227,12 +227,18 @@ for line in sys.stdin:
         os.close(master)
     # Stop allows a short pending operation and its own cleanup to finish. The hard
     # session deadline terminates a longer operation instead of accepting its late result.
-    for identity, session_seconds, delay in [('stoppable', 20, .65), ('expired', 1, 2.4)]:
+    cases = [
+        ('stoppable', 20, .65, 5, []),
+        ('expired', 1, 2.4, 5, ['Session expired']),
+        ('unknown-before-expiry', 2, 2.6, 1, ['Outcome unknown', 'Session expired']),
+        ('stop-before-expiry', 1, 1.55, 5, []),
+    ]
+    for identity, session_seconds, delay, timeout, statuses in cases:
         path=manifest(identity, ['pending', 'never'])
         data=json.loads(path.read_text())
         data['session_seconds']=session_seconds
         data['parameters']={'delay':delay}
-        data['steps'][0]['timeout_seconds']=5
+        data['steps'][0]['timeout_seconds']=timeout
         path.write_text(json.dumps(data))
         cli('register',str(path))
         (root/'actions.log').write_text('')
@@ -245,10 +251,10 @@ for line in sys.stdin:
             wait_text('Start scenario prepares the demo.')
             os.write(master,b's');wait_text('Setup complete.')
             os.write(master,b'\x1b[20~');wait_text('Interruptible operation in progress.')
-            if identity=='expired':
-                wait_text('Session expired')
+            for status in statuses:
+                wait_text(status)
             os.write(master,b'q')
-            assert (interactive.wait(timeout=5)==0) == (identity=='stoppable')
+            assert (interactive.wait(timeout=5)==0) == (not statuses)
             assert (root/'pending-finished').exists() == (identity=='stoppable')
             assert (root/'cleanup-finished').exists() == (identity=='stoppable')
             assert 'run:never' not in (root/'actions.log').read_text()
@@ -257,6 +263,8 @@ for line in sys.stdin:
             if interactive.poll() is None: interactive.kill();interactive.wait()
             os.close(master)
     assert 'time limit' in cli('run','expired','--auto',ok=False).stderr
+    assert not (root/'pending-finished').exists()
+    assert 'timed out' in cli('run','unknown-before-expiry','--auto',ok=False).stderr
     assert not (root/'pending-finished').exists()
     for failure in ['fail','timeout','wrong']:
         cli('register',str(manifest(failure,[failure,'never'])))

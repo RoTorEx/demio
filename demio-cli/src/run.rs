@@ -205,7 +205,7 @@ pub fn doctor(channel: &Channel, manifest: &Path, cancelled: &AtomicBool) -> Res
     let worker = Worker::start(channel, manifest, &scratch.0)?;
     worker.send("check", None, 30)?;
     let result = worker.wait(cancelled, None);
-    worker.cleanup();
+    worker.cleanup(None);
     result?;
     println!("Ready: {} [{}]", channel.name, channel.id);
     Ok(())
@@ -441,8 +441,18 @@ impl Presenter {
     }
 
     fn blocked(&mut self, index: Option<usize>, status: &'static str, detail: impl Into<String>) {
-        self.deadline = None;
         self.change(Phase::Blocked { index, status }, detail);
+    }
+
+    fn may_have_pending_operation(&self) -> bool {
+        matches!(
+            self.phase,
+            Phase::Working(_)
+                | Phase::Blocked {
+                    status: "Outcome unknown",
+                    ..
+                }
+        )
     }
 
     fn step(&mut self, channel: &Channel, worker: Option<&Worker>, index: usize, execute: bool) {
@@ -590,18 +600,20 @@ fn auto_run(
     let worker = Worker::start(channel, manifest, &scratch.0)?;
     let mut position = Position::default();
     let mut prepared = false;
+    let mut deadline = None;
     let result = (|| -> Result<()> {
         println!("Preparing {} [{}]…", channel.name, channel.id);
         worker.send("prepare", None, channel.steps[0].timeout_seconds)?;
         worker.wait(cancelled, None)?;
         prepared = true;
-        let deadline = Instant::now() + Duration::from_secs(channel.session_seconds);
+        let end = Instant::now() + Duration::from_secs(channel.session_seconds);
+        deadline = Some(end);
         for (index, step) in channel.steps.iter().enumerate() {
+            if Instant::now() >= end {
+                return Err(SessionExpired.into());
+            }
             if cancelled.load(Ordering::Relaxed) {
                 bail!("Session stopped before next step");
-            }
-            if Instant::now() >= deadline {
-                return Err(SessionExpired.into());
             }
             println!(
                 "{}/{}  {}  {}\n{}",
@@ -612,18 +624,13 @@ fn auto_run(
                 step.say
             );
             worker.send("run", Some(&step.id), step.timeout_seconds)?;
-            worker.wait(cancelled, Some(deadline))?;
+            worker.wait(cancelled, deadline)?;
             position.finish(index, true);
             journal(channel, &position, "Ready");
         }
         Ok(())
     })();
-    if !result
-        .as_ref()
-        .is_err_and(|error| error.is::<SessionExpired>())
-    {
-        worker.cleanup();
-    }
+    worker.cleanup(deadline);
     drop(worker);
     let (status, outcome) = if result.is_ok() {
         ("Finished", "success")
@@ -703,7 +710,8 @@ pub fn run(
             break;
         }
         if presenter.deadline.is_some_and(|end| Instant::now() >= end) {
-            let in_flight = matches!(presenter.phase, Phase::Working(_));
+            let in_flight = presenter.may_have_pending_operation();
+            presenter.deadline = None;
             presenter.blocked(
                 presenter.index(),
                 "Session expired",
@@ -711,7 +719,7 @@ pub fn run(
             );
             if let Some(expired) = worker.take() {
                 if !in_flight {
-                    expired.cleanup();
+                    expired.cleanup(None);
                 }
             }
             continue;
@@ -784,7 +792,10 @@ pub fn run(
     drop(screen);
     drop(panel);
     if let Some(worker) = worker {
-        worker.cleanup();
+        let deadline = presenter
+            .deadline
+            .filter(|_| presenter.may_have_pending_operation());
+        worker.cleanup(deadline);
     }
     let failed = matches!(
         presenter.phase,
