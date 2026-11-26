@@ -8,10 +8,12 @@ import subprocess
 import sys
 import tempfile
 import time
+from playwright.sync_api import Error, sync_playwright
 base=Path.home()/'construction_side/demio/checks';base.mkdir(parents=True,exist_ok=True)
 root=Path(__file__).resolve().parents[1]
+fixture=root/'tests/fixtures/browser'
 with tempfile.TemporaryDirectory(dir=base) as temporary:
-    with subprocess.Popen([sys.executable,'-u',str(root/'examples/browser/adapter.py')],cwd=root/'examples/browser',stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True,env=dict(os.environ,DEMIO_HEADLESS='1')) as adapter:
+    with subprocess.Popen([sys.executable,'-u',str(fixture/'adapter.py')],cwd=fixture,stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True,env=dict(os.environ,DEMIO_HEADLESS='1')) as adapter:
         def call(sequence,op,step=None):
             adapter.stdin.write(json.dumps({'id':sequence,'op':op,'step':step,'session_dir':temporary})+'\n');adapter.stdin.flush()
             reply=json.loads(adapter.stdout.readline());assert reply['id']==sequence and reply.get('ok'),reply
@@ -22,15 +24,28 @@ with tempfile.TemporaryDirectory(dir=base) as temporary:
 print('Browser: paced fields, scrolling, submit, approve, final state and read-only preview passed.')
 
 binary = Path(sys.argv[1]).resolve()
-with tempfile.TemporaryDirectory(prefix='browser scaffold ', dir=base) as temporary:
+with tempfile.TemporaryDirectory(prefix='browser scaffold ', dir=base) as temporary, sync_playwright() as observer:
     home = Path(temporary)
     demo = home / 'example demo'
     env = dict(os.environ, DEMIO_HOME=str(home), DEMIO_CONFIG=str(home / 'config.toml'),
-               DEMIO_RUNTIME_DIR=str(home / 'runtime'), DEMIO_HEADLESS='1')
+               DEMIO_RUNTIME_DIR=str(home / 'runtime'),
+               DEMIO_HEADLESS='0' if '--headed' in sys.argv[2:] else '1')
+    # A loopback-only inspection port lets the test act as the presenter in the
+    # same owned browser used by the real CLI. The shipped adapter is identical.
+    inspection = home / 'inspection'
+    inspection.mkdir()
+    (inspection / 'sitecustomize.py').write_text('''from playwright.sync_api import BrowserType
+launch = BrowserType.launch_persistent_context
+def inspect(self, *args, **kwargs):
+    kwargs["args"] = [*(kwargs.get("args") or []), "--remote-debugging-port=0",
+                      "--remote-debugging-address=127.0.0.1"]
+    return launch(self, *args, **kwargs)
+BrowserType.launch_persistent_context = inspect
+''')
 
     def cli(*args):
         result = subprocess.run([str(binary), *map(str, args)], env=env, capture_output=True,
-                                text=True, timeout=60)
+                                text=True, timeout=90)
         assert result.returncode == 0, (args, result.stdout, result.stderr)
 
     cli('init', demo)
@@ -47,6 +62,9 @@ with tempfile.TemporaryDirectory(prefix='browser scaffold ', dir=base) as tempor
         variant = Path(path).parent.name
         scenarios[variant] = document
         assert len(document['steps']) >= 3 and document['intro'] != document['steps'][0]['say']
+        assert document['type'] == ('system' if variant == 'mac-file' else 'browser')
+        tokens = document['development_tokens']
+        assert tokens['input'] >= tokens['cached_input'] > 0 and tokens['output'] > 0
         if variant != 'mac-file':
             cli('doctor', document['id'])
     cli('run', scenarios['navigation']['id'], '--auto')
@@ -55,12 +73,15 @@ with tempfile.TemporaryDirectory(prefix='browser scaffold ', dir=base) as tempor
     for variant in ('waiting', 'timeout', 'recovery'):
         document = scenarios[variant]
         master, slave = pty.openpty()
+        run_env = dict(env)
+        if variant != 'waiting':
+            run_env['PYTHONPATH'] = str(inspection)
         process = subprocess.Popen([binary, 'run', document['id'], '--no-overlay'],
-                                   stdin=slave, stdout=slave, stderr=slave, env=env)
+                                   stdin=slave, stdout=slave, stderr=slave, env=run_env)
         os.close(slave)
 
         def expect(status, step, after=-1):
-            deadline = time.monotonic() + 15
+            deadline = time.monotonic() + 35
             frame = None
             while time.monotonic() < deadline:
                 if select.select([master], [], [], 0.1)[0]:
@@ -79,33 +100,85 @@ with tempfile.TemporaryDirectory(prefix='browser scaffold ', dir=base) as tempor
             os.write(master, b's')
             _, first = expect('Ready', 1)
             assert first['say'] == document['steps'][0]['say']
-            os.write(master, next_key)
-            expect('Ready', 1, after=first['generation'])
+            if variant != 'waiting':
+                debug_port = int((session / 'browser/DevToolsActivePort').read_text().splitlines()[0])
+                chrome = observer.chromium.connect_over_cdp(f'http://127.0.0.1:{debug_port}')
+                page = chrome.contexts[0].pages[0]
+                assert page.url == 'https://www.wikipedia.org/'
+                page.evaluate("""() => {
+                    window.searchInputs = [];
+                    window.moves = [];
+                    document.addEventListener('input', event => window.searchInputs.push(event.target.value));
+                    document.addEventListener('mousemove', event => window.moves.push([event.clientX, event.clientY]));
+                }""")
+            preceding_steps = 2 if variant == 'waiting' else 3
+            for step in range(1, preceding_steps + 1):
+                os.write(master, next_key)
+                _, first = expect('Ready', step, after=first['generation'])
+                if variant != 'waiting' and step == 1:
+                    query = 'Ada Lovelace'
+                    assert page.evaluate('searchInputs') == [query[:i] for i in range(1, len(query) + 1)]
+                    assert len({tuple(position) for position in page.evaluate('moves')}) > 6
+                    assert page.locator('[data-demio-pointer]').is_visible()
+            expected_step = preceding_steps + 1
             os.write(master, next_key)
             if variant == 'timeout':
-                expect('Waiting', 2)
-                _, blocked = expect('Outcome unknown', 2)
+                expect('Waiting', expected_step)
+                _, blocked = expect('Outcome unknown', expected_step)
                 assert blocked['primary'] is None
+                page.locator('a[href="#Work"]:visible').first.click()
+                assert page.url.endswith('/Ada_Lovelace#Work')
                 os.write(master, next_key * 3 + b'c')
-                _, still_blocked = expect('Outcome unknown', 2)
+                _, still_blocked = expect('Outcome unknown', expected_step)
                 assert still_blocked['generation'] == blocked['generation']
             elif variant == 'waiting':
-                expect('Waiting', 2)
+                expect('Waiting', expected_step)
                 os.write(master, next_key * 3)
-                expect('Ready', 2)
+                expect('Ready', expected_step)
+                download_step = expected_step + 1
                 os.write(master, next_key)
-                _, gate = expect('Awaiting confirmation', 3)
+                _, gate = expect('Awaiting confirmation', download_step)
                 assert gate['primary'] == 'confirm'
                 assert (session / 'tzdata2026f.tar.gz').is_file()
                 os.write(master, next_key * 3)
-                expect('Awaiting confirmation', 3)
+                expect('Awaiting confirmation', download_step)
                 os.write(master, b'c')
-                expect('Ready', 3)
+                expect('Ready', download_step)
                 os.write(master, next_key)
-                expect('Finished', 4)
+                expect('Ready', download_step + 1)
+                os.write(master, next_key)
+                expect('Finished', download_step + 2)
             else:
-                _, failed = expect('Step failed', 2)
+                _, failed = expect('Step failed', expected_step)
                 assert failed['primary'] == 'confirm' and 'Select Work' in failed['detail']
+                os.write(master, next_key * 3)
+                _, still_failed = expect('Step failed', expected_step)
+                assert still_failed['generation'] == failed['generation']
+                page.locator('a[href="#Work"]:visible').first.click()
+                assert page.url.endswith('/Ada_Lovelace#Work')
+                top = page.evaluate('scrollY')
+                page.evaluate("""() => {
+                    window.scrollPositions = [];
+                    window.addEventListener('scroll', () => scrollPositions.push(scrollY), {passive: true});
+                }""")
+                os.write(master, b'c')
+                expect('Ready', expected_step)
+                os.write(master, next_key)
+                expect('Ready', expected_step + 1)
+                assert page.evaluate('scrollY') > top
+                positions = page.evaluate('scrollPositions')
+                assert len(set(positions)) >= 10, positions
+                os.write(master, next_key)
+                expect('Finished', expected_step + 2)
+                try:
+                    page.evaluate('location.href')
+                except Error:
+                    assert page.is_closed() or not chrome.is_connected()
+                else:
+                    raise AssertionError('Close left the rehearsal browser running.')
+                os.write(master, b'\x1b[18~')
+                expect('Finished', expected_step + 1)
+                assert page.is_closed() or not chrome.is_connected()
             os.write(master, b'q')
             deadline = time.monotonic() + 8
             while process.poll() is None and time.monotonic() < deadline:
@@ -114,7 +187,7 @@ with tempfile.TemporaryDirectory(prefix='browser scaffold ', dir=base) as tempor
                         os.read(master, 65536)
                     except OSError:
                         break
-            assert (process.wait(timeout=1) == 0) == (variant == 'waiting'), variant
+            assert (process.wait(timeout=1) == 0) == (variant != 'timeout'), variant
             print(f'Browser scaffold variant verified: {variant}')
         finally:
             if process.poll() is None:
@@ -122,4 +195,5 @@ with tempfile.TemporaryDirectory(prefix='browser scaffold ', dir=base) as tempor
                 process.wait(timeout=8)
             os.close(master)
     assert not list((home / 'runtime').iterdir())
-print('Browser scaffold: live tabs, countdown, official download, confirmation, real prerequisite failure and timeout passed.')
+
+print('Browser scaffold: visible pointer events, typed query, live tabs, countdown, official download, confirmation, recovery, scrolling and close passed.')

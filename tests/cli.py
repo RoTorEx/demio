@@ -32,6 +32,10 @@ for line in sys.stdin:
   time.sleep(3)
   print(json.dumps({"id":r["id"],"event":"done","ok":True}),flush=True)
  elif r["op"]=="run" and r["step"]=="wrong": print(json.dumps({"id":999,"event":"done","ok":True}),flush=True)
+ elif r["op"]=="run" and r["step"]=="progress-burst":
+  for _ in range(2000):
+   print(json.dumps({"id":r["id"],"event":"status","detail":"Reading progress"}))
+  print(json.dumps({"id":r["id"],"event":"done","ok":True}),flush=True)
  elif r["op"]=="run" and "delay" in parameters:
   print(json.dumps({"id":r["id"],"event":"status","waiting":True,"detail":"Interruptible operation in progress."}),flush=True)
   time.sleep(parameters["delay"])
@@ -93,11 +97,17 @@ for line in sys.stdin:
     cli('register',str(alternate),'--replace')
     cli('doctor','z-demo')
     cli('run','z-demo','--auto')
+    burst=manifest('progress-burst',['progress-burst'])
+    burst_doc=json.loads(burst.read_text())
+    burst_doc['steps'][0]['timeout_seconds']=5
+    burst.write_text(json.dumps(burst_doc))
+    cli('register',str(burst))
+    cli('run','progress-burst','--auto')
     log=(root/'actions.log').read_text()
     assert log.count('run:one') == 1 and log.count('run:two') == 1
     events=[json.loads(line) for line in (root/'product/logs/demio.jsonl').read_text().splitlines()]
     completed = [e for e in events if e.get('action') == 'scenario_run' and e.get('result') == 'success']
-    assert completed and completed[-1]['fields']['completed'] == 2
+    assert any(event['fields']['completed'] == 2 for event in completed)
     assert 'Read this' not in (root/'product/logs/demio.jsonl').read_text()
     # Exercise the actual interactive entrypoint, including backward navigation.
     (root/'actions.log').write_text('')
@@ -147,7 +157,7 @@ for line in sys.stdin:
     try:
         wait_text('opens the rehearsal.')
         assert not (root/'actions.log').read_text()
-        os.write(master,b's');wait_text('Speak, then press F9')
+        os.write(master,b's');wait_text('Rehearsal view ready.')
         os.write(master,b'\x1b[20~');wait_text('End of the scenario')
         os.write(master,b'\x1b[18~');wait_text('1/2')
         os.write(master,b'q');interactive.wait(timeout=5)

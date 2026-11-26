@@ -56,6 +56,13 @@ for line in sys.stdin:
     config_path.write_text(saved_config.replace(str(first),str(alias)))
     cli('doctor','alpha-one')
     config_path.write_text(saved_config)
+    owner=root/'alpha/demo.json'
+    original=owner.read_bytes()
+    listed=json.loads(original)
+    listed['scenarios'][0]=alias.name
+    write(owner,listed)
+    cli('validate',first)
+    owner.write_bytes(original)
     cli('register',root/'alpha/demo.json')
     assert json.loads(first.read_text())['created_at']==first_created
     # A missing sibling does not make an otherwise valid scenario unlaunchable.

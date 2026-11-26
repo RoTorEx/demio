@@ -33,16 +33,66 @@ fn session_timeout() -> u64 {
 fn default_root() -> String {
     ".".into()
 }
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ScenarioType {
+    Browser,
+    System,
+}
+
+impl ScenarioType {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Browser => "Browser",
+            Self::System => "System",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TokenBasis {
+    Measured,
+    Allocated,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct DevelopmentTokens {
+    pub input: u64,
+    pub cached_input: u64,
+    pub output: u64,
+    pub basis: TokenBasis,
+}
+
+impl DevelopmentTokens {
+    pub fn label(self) -> String {
+        let basis = match self.basis {
+            TokenBasis::Measured => "measured",
+            TokenBasis::Allocated => "allocated",
+        };
+        let total = u128::from(self.input) + u128::from(self.output);
+        format!("{total} ({basis})")
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Channel {
     pub schema_version: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub demo: Option<PathBuf>,
+    #[serde(skip)]
+    demo_info: Option<crate::demo::DemoInfo>,
     #[serde(default)]
     pub parameters: BTreeMap<String, serde_json::Value>,
     pub id: String,
     pub name: String,
+    #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+    pub scenario_type: Option<ScenarioType>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub development_tokens: Option<DevelopmentTokens>,
     #[serde(default)]
     pub project: String,
     #[serde(default)]
@@ -63,22 +113,27 @@ impl Channel {
         let source = path
             .canonicalize()
             .with_context(|| format!("Read {}", path.display()))?;
-        let channel: Self = serde_json::from_value(crate::demo::scenario_document(&source)?)
-            .context("Invalid scenario JSON")?;
+        Self::load_canonical(&source)
+    }
+    fn load_canonical(source: &Path) -> Result<Self> {
+        let (document, demo_info) = crate::demo::scenario_document(source)?;
+        let mut channel: Self =
+            serde_json::from_value(document).context("Invalid scenario JSON")?;
+        channel.demo_info = demo_info;
         channel.validate()?;
         Ok(channel)
-    }
-    pub fn demo_info(&self) -> Result<Option<crate::demo::DemoInfo>> {
-        self.demo
-            .as_ref()
-            .map(|path| crate::demo::Demo::load(path)?.info(path))
-            .transpose()
     }
     pub fn validate(&self) -> Result<()> {
         if self.schema_version != 1 {
             bail!("Unsupported schema_version; expected 1");
         }
         validate_id(&self.id)?;
+        if self
+            .development_tokens
+            .is_some_and(|tokens| tokens.cached_input > tokens.input)
+        {
+            bail!("development_tokens.cached_input cannot exceed input");
+        }
         if self.name.trim().is_empty() || self.workspace.trim().is_empty() {
             bail!("Channel name and workspace must not be empty");
         }
@@ -134,6 +189,9 @@ impl Channel {
     }
     pub fn workspace_path(&self, manifest: &Path) -> Result<PathBuf> {
         let source = manifest.canonicalize().context("Manifest does not exist")?;
+        self.workspace_from_source(&source)
+    }
+    fn workspace_from_source(&self, source: &Path) -> Result<PathBuf> {
         let root = source
             .parent()
             .context("Manifest has no parent directory")?
@@ -164,6 +222,10 @@ pub struct Entry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub demo: Option<crate::demo::DemoInfo>,
     pub name: String,
+    #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+    pub scenario_type: Option<ScenarioType>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub development_tokens: Option<DevelopmentTokens>,
     pub manifest: PathBuf,
     #[serde(default)]
     pub project: String,
@@ -240,6 +302,10 @@ pub struct Listing {
     pub demo: Option<crate::demo::DemoInfo>,
     pub id: String,
     pub name: String,
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    pub scenario_type: Option<ScenarioType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub development_tokens: Option<DevelopmentTokens>,
     pub display_name: String,
     pub project: String,
     pub description: String,
@@ -284,13 +350,13 @@ impl Config {
             .manifest
             .canonicalize()
             .context("Manifest does not exist")?;
-        let channel = Channel::load(&path)?;
+        let channel = Channel::load_canonical(&path)?;
         if channel.id != id {
             bail!(
                 "Registered ID no longer matches manifest; register the updated channel explicitly"
             );
         }
-        channel.workspace_path(&path)?;
+        channel.workspace_from_source(&path)?;
         Ok((channel, path))
     }
     pub fn listing(&self) -> Vec<Listing> {
@@ -299,24 +365,29 @@ impl Config {
             .iter()
             .map(|(id, entry)| {
                 let resolved = self.resolve(id);
-                let (name, project, description, created_at) = match &resolved {
-                    Ok((channel, path)) => (
-                        channel.name.clone(),
-                        channel.project_name(path),
-                        channel.description.clone(),
-                        channel.created_at.or(entry.created_at),
-                    ),
-                    Err(_) => (
-                        entry.name.clone(),
-                        if entry.project.is_empty() {
-                            "Unspecified project".into()
-                        } else {
-                            entry.project.clone()
-                        },
-                        entry.description.clone(),
-                        entry.created_at,
-                    ),
-                };
+                let (name, project, description, created_at, scenario_type, development_tokens) =
+                    match &resolved {
+                        Ok((channel, path)) => (
+                            channel.name.clone(),
+                            channel.project_name(path),
+                            channel.description.clone(),
+                            channel.created_at.or(entry.created_at),
+                            channel.scenario_type,
+                            channel.development_tokens,
+                        ),
+                        Err(_) => (
+                            entry.name.clone(),
+                            if entry.project.is_empty() {
+                                "Unspecified project".into()
+                            } else {
+                                entry.project.clone()
+                            },
+                            entry.description.clone(),
+                            entry.created_at,
+                            entry.scenario_type,
+                            entry.development_tokens,
+                        ),
+                    };
                 let created_at = created_at.or_else(|| {
                     fs::metadata(&entry.manifest)
                         .ok()?
@@ -327,13 +398,15 @@ impl Config {
                 let demo = resolved
                     .as_ref()
                     .ok()
-                    .and_then(|(channel, _)| channel.demo_info().ok().flatten())
+                    .and_then(|(channel, _)| channel.demo_info.clone())
                     .or_else(|| entry.demo.clone());
                 Listing {
                     demo,
                     id: id.clone(),
                     display_name: prefixed_name(&project, &name),
                     name,
+                    scenario_type,
+                    development_tokens,
                     project,
                     description,
                     created_at,
@@ -370,8 +443,8 @@ impl Config {
         let mut ids = std::collections::HashSet::new();
         // Validate the complete batch before changing the registry or timestamps.
         for manifest in paths {
-            let mut channel = Channel::load(manifest)?;
-            channel.workspace_path(manifest)?;
+            let mut channel = Channel::load_canonical(manifest)?;
+            channel.workspace_from_source(manifest)?;
             if !ids.insert(channel.id.clone()) {
                 bail!("Duplicate scenario ID: {}", channel.id);
             }
@@ -397,9 +470,12 @@ impl Config {
                 bytes.push(b'\n');
                 write = Some(bytes);
             }
+            let project = channel.project_name(manifest);
             let entry = Entry {
-                demo: channel.demo_info()?,
-                project: channel.project_name(manifest),
+                demo: channel.demo_info,
+                scenario_type: channel.scenario_type,
+                development_tokens: channel.development_tokens,
+                project,
                 description: channel.description,
                 created_at: channel.created_at,
                 name: channel.name,
@@ -430,6 +506,8 @@ mod metadata_tests {
             demo: None,
             id: "demo".into(),
             name: "Example".into(),
+            scenario_type: None,
+            development_tokens: None,
             display_name: "Project · Example".into(),
             project: "Project".into(),
             description: "Description".into(),

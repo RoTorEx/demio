@@ -18,8 +18,9 @@ moving while a material choice is unresolved.
 Demo format (schema 1): id, name, optional project/description, workspace (default
 `.`), adapter argument array, optional session_seconds, parameters object, and
 scenarios (an explicit nonempty list of relative paths inside this demo folder).
-Scenario schema 1 retains the existing step/run contract and adds optional demo
-and parameters. Legacy standalone scenarios still define their own adapter and
+Scenario schema 1 retains the step/run contract and supports optional demo,
+parameters and type (`browser` or `system`). Type is display metadata.
+Legacy standalone scenarios still define their own adapter and
 workspace. Unknown fields are rejected in both manifests.
 
 Scenario fields override inherited demo fields. Inherited workspace resolves
@@ -74,7 +75,9 @@ Operations:
 | cleanup | Close owned browser contexts and services |
 
 Keep stdout strictly JSON lines. Send logs to stderr. Replies must use the exact
-active numeric request ID and one of these events:
+active numeric request ID. Each reply may contain up to one MiB of JSON.
+The presenter displays the latest progress detail for the active request and
+consumes each completion. The two event kinds are shown below.
 
 ```json
 {"id":1,"event":"status","detail":"Waiting for approval status"}
@@ -114,8 +117,8 @@ The macOS helper reads `panel.json` from the owned session directory. It
 displays the CLI's available actions and returns a command with the visible
 frame's generation. The CLI discards commands from old frames. Stop works
 in every phase. The presenter combines controls, status and notes in one
-window that retains its position and size for the session. F7/F9 handle only
-Back and Next.
+window that retains its position and size for the session. F7/F9 handle Back and
+Forward. The information button shows these shortcuts and the wait legend.
 
 ## Transfer to another machine
 

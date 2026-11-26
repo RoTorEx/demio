@@ -268,7 +268,10 @@ impl Action {
     }
 }
 
-fn read_action(receiver: &mpsc::Receiver<String>, generation: u64) -> Result<Option<Action>> {
+fn read_action(
+    receiver: &mpsc::Receiver<String>,
+    generation: u64,
+) -> Result<Option<(Action, &'static str)>> {
     let mut chosen = None;
     for message in receiver.try_iter().take(64) {
         match Action::from_panel(&message, generation) {
@@ -293,14 +296,15 @@ fn read_action(receiver: &mpsc::Receiver<String>, generation: u64) -> Result<Opt
             _ => (),
         }
     }
-    Ok(chosen.map(|(action, source)| {
-        crate::usage::event(
-            "navigation",
-            "observed",
-            serde_json::json!({"command":action.name(),"source":source}),
-        );
-        action
-    }))
+    Ok(chosen)
+}
+
+fn journal_action(action: Action, source: &str) {
+    crate::usage::event(
+        "navigation",
+        "observed",
+        serde_json::json!({"command":action.name(),"source":source}),
+    );
 }
 
 #[derive(Clone, Copy)]
@@ -429,13 +433,13 @@ impl Presenter {
     fn ready(&mut self, total: usize) {
         let detail = match (self.dry, self.position.completed) {
             (true, count) if count == total && self.position.view == Some(total - 1) => {
-                "End of the scenario. Back previews earlier cues."
+                "End of the scenario."
             }
-            (true, _) if self.rehearsal_windows => "Dry run. Speak, then press F9.",
-            (true, _) => "Dry run, narration only. Speak, then press F9.",
-            (false, 0) => "Setup complete. Press F9 to run step 1.",
-            (false, count) if count == total => "Demo complete. Back previews completed steps.",
-            (false, _) => "Step complete. Speak, then press F9.",
+            (true, _) if self.rehearsal_windows => "Rehearsal view ready.",
+            (true, _) => "Dry run, narration only.",
+            (false, 0) => "Setup complete.",
+            (false, count) if count == total => "Demo complete.",
+            (false, _) => "Step complete.",
         };
         self.change(Phase::Ready, detail);
     }
@@ -680,8 +684,8 @@ pub fn run(
     let scratch = Scratch::new()?;
     let panel_path = scratch.0.join("panel.json");
     let mut presenter = Presenter::new(dry);
-    let mut drawn = serde_json::to_vec(&presenter.display(&channel))?;
-    atomic_write(&panel_path, &drawn)?;
+    let initial = presenter.display(&channel);
+    atomic_write(&panel_path, &serde_json::to_vec(&initial)?)?;
     let (input_tx, input_rx) = mpsc::channel();
     let panel = if no_overlay {
         None
@@ -689,26 +693,33 @@ pub fn run(
         Some(overlay(&scratch.0, input_tx)?)
     };
     let screen = Screen::enter()?;
-    paint(
-        &terminal_text(&channel, &presenter.display(&channel)),
-        theme,
-    )?;
+    paint(&terminal_text(&channel, &initial), theme)?;
     let mut worker: Option<Worker> = None;
+    let mut drawn_generation = presenter.generation;
+    let mut progress_changed = false;
+    let mut stop_source = None;
     while !cancelled.load(Ordering::Relaxed) {
-        let frame = presenter.display(&channel);
-        let encoded = serde_json::to_vec(&frame)?;
-        if encoded != drawn {
-            atomic_write(&panel_path, &encoded)?;
+        if progress_changed || drawn_generation != presenter.generation {
+            let frame = presenter.display(&channel);
+            atomic_write(&panel_path, &serde_json::to_vec(&frame)?)?;
             paint(&terminal_text(&channel, &frame), theme)?;
-            drawn = encoded;
+            drawn_generation = presenter.generation;
+            progress_changed = false;
         }
 
         // Consume input against the visible phase before applying a worker reply.
         // A key pressed while waiting cannot advance the next step.
-        let action = read_action(&input_rx, presenter.generation)?;
-        if action == Some(Action::Quit) {
-            break;
-        }
+        let action = match read_action(&input_rx, presenter.generation)? {
+            Some((Action::Quit, source)) => {
+                stop_source = Some(source);
+                break;
+            }
+            Some((action, source)) => {
+                journal_action(action, source);
+                Some(action)
+            }
+            None => None,
+        };
         if presenter.deadline.is_some_and(|end| Instant::now() >= end) {
             let in_flight = presenter.may_have_pending_operation();
             presenter.deadline = None;
@@ -774,15 +785,18 @@ pub fn run(
             continue;
         }
         if let Some(worker) = &worker {
+            if let (Phase::Working(_), Some(progress)) = (&presenter.phase, worker.take_progress())
+            {
+                progress_changed =
+                    presenter.detail != progress.detail || presenter.waiting != progress.waiting;
+                presenter.detail = progress.detail;
+                presenter.waiting = progress.waiting;
+            }
             while let Ok(event) = worker.events.try_recv() {
                 let Phase::Working(work) = presenter.phase else {
                     continue;
                 };
                 match event {
-                    Event::Progress { detail, waiting } => {
-                        presenter.detail = detail;
-                        presenter.waiting = waiting;
-                    }
                     Event::Done(result) => presenter.finish_work(&channel, worker, work, result),
                     Event::CleanupComplete => (),
                 }
@@ -796,6 +810,9 @@ pub fn run(
             .deadline
             .filter(|_| presenter.may_have_pending_operation());
         worker.cleanup(deadline);
+    }
+    if let Some(source) = stop_source {
+        journal_action(Action::Quit, source);
     }
     let failed = matches!(
         presenter.phase,

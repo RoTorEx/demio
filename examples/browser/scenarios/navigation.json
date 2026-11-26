@@ -2,39 +2,47 @@
   "schema_version": 1,
   "id": "browser-navigation",
   "name": "Wikipedia and Wikidata",
-  "description": "Open two public pages in a fixed tab order, then return to the original article.",
-  "intro": "Welcome. We will follow the same subject across two public sites and revisit a tab we already opened.",
-  "parameters": {
-    "route": "navigation",
-    "pages": [
-      {
-        "url": "https://en.wikipedia.org/wiki/Ada_Lovelace",
-        "heading": "Ada Lovelace"
-      },
-      {
-        "url": "https://www.wikidata.org/wiki/Q7259",
-        "heading": "Ada Lovelace"
-      }
-    ]
-  },
+  "type": "browser",
+  "development_tokens": {"input": 2561851, "cached_input": 2536688, "output": 13255, "basis": "allocated"},
+  "description": "Search for Ada Lovelace, follow the article's Wikidata link in a second tab, then return and close the walkthrough.",
+  "intro": "Welcome. We will find the same subject across two public sites. Watch the pointer, typed search and tab order.",
+  "parameters": {"route": "navigation"},
   "steps": [
     {
-      "id": "article",
-      "title": "Open Work in the Wikipedia article",
+      "id": "search",
+      "title": "Type Ada Lovelace in Wikipedia",
       "role": "Presenter",
-      "say": "I use the article's table of contents to open Work in the first tab."
+      "say": "I move to Wikipedia's search field and type Ada Lovelace. The matching article appears below the field."
+    },
+    {
+      "id": "open-article",
+      "title": "Click the Ada Lovelace result",
+      "role": "Presenter",
+      "say": "I click the result in the search suggestions and check the article heading."
+    },
+    {
+      "id": "article",
+      "title": "Read the Work section",
+      "role": "Presenter",
+      "say": "I click Work in the contents and scroll down to read more."
     },
     {
       "id": "data",
       "title": "Open the Wikidata entry",
       "role": "Presenter",
-      "say": "The second tab opens the structured data entry for the same subject."
+      "say": "I open the article's Tools menu and click its Wikidata item into a second tab."
     },
     {
       "id": "return",
       "title": "Return to the original article",
       "role": "Presenter",
       "say": "I select Biography in the first tab. Both tabs remain open in their original order."
+    },
+    {
+      "id": "close",
+      "title": "Close the walkthrough window",
+      "role": "Presenter",
+      "say": "I close the rehearsal window after showing both tabs."
     }
   ]
 }

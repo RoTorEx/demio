@@ -1,4 +1,4 @@
-"""Local browser example. Stdout is reserved for the Demio protocol."""
+"""Local browser fixture. Stdout is reserved for the Demio protocol."""
 import functools
 import http.server
 import json

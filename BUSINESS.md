@@ -52,9 +52,13 @@ A demo is one user-owned folder containing demo.json, AGENTS.md, README.md,
 shared components and one or more scenarios. Demo metadata owns its name,
 description, project, workspace, adapter defaults, shared parameters and an
 explicit list of scenario paths. A scenario references its demo and owns a stable
-run ID, readable name, description, creation time, ordered steps, narration and
-parameter overrides. A step belongs to a scenario and invokes adapter behavior
-by its step ID. Neither a scenario nor a step is another demo.
+run ID, readable name, description, optional type, creation time, ordered steps,
+narration and parameter overrides. A step belongs to a scenario and invokes
+adapter behavior by its step ID. The scenario type is browser or system metadata.
+A legacy manifest without a type displays Unspecified.
+Optional development token metadata records input, cached input, output and
+the accounting basis. The cached count is part of input. Metadata displays
+the sum of input and output, with the allocation basis and cache breakdown.
 
 Demo-relative workspace defaults resolve at demo.json. An explicit scenario
 workspace override resolves beside its scenario JSON. Adapter commands execute
@@ -71,9 +75,14 @@ Their metadata snapshots and demo membership remain visible when files become
 unavailable. One missing sibling does not invalidate a runnable scenario.
 
 The scaffold creates browser and native Mac rehearsals with local authoring
-instructions. The browser cases use public Wikipedia, Wikidata and IANA
-pages with a fresh browser environment. The tab rehearsal uses an ordered
-pair of page handles. The Mac rehearsal creates one uniquely
+instructions. The browser cases use public Wikipedia, Wikidata and IANA pages
+in an isolated Google Chrome profile. The audience sees the pointer, paced
+typing, real link clicks and smooth wheel scrolling. Search results and subsequent
+views follow visible input. Manual recovery requires the presenter to select
+Work and confirm before the adapter verifies and scrolls that section. The tab
+rehearsal follows the published Wikidata link into an owned second tab. Closing
+a rehearsal closes its window, and Back after Close previews the cue without
+reopening it. The Mac rehearsal creates one uniquely
 named document in the selected folder, which defaults to the desktop. A
 completed document remains available in TextEdit. Generated demo/scenario IDs use six
 alphanumeric characters. The authoring agent must explain terminology and
@@ -94,14 +103,17 @@ fall back to filesystem creation time, which is an approximation for copied or
 checked-out files. Unavailable manifests use the last registered metadata snapshot.
 Metadata tests cover date order, edits, missing manifests, and summer/winter time.
 
-The selector shows grouped scenarios on the left and details on the right, even
-in narrow terminals. The list keeps the Warsaw creation year and a three-column
-gap between date and name. It uses ` | ` between name segments for display.
-Wider terminals give extra space to the details pane. It shows the full title,
-description, step-zero cue and ordered steps with wait and confirmation cues.
-Stable ID, project, creation time, source paths and session limit follow below.
-PageUp/PageDown scroll details. Unavailable scenarios place the error beside the
-title and refuse to open. An empty registry shows registration guidance.
+The selector shows grouped scenarios on the left and details on the right.
+The list shows ID, Warsaw creation date as DD.MM.YY, and the scenario name.
+It uses an ellipsis for overflowing cells. The ID column takes at most
+12 characters so it leaves room for names. The full stable ID appears in
+Metadata and remains the CLI identity. Metadata starts the right pane with ID,
+name, type, project, creation date and time, source paths and session limit.
+Description, the step-zero cue, and the ordered steps with wait and confirmation
+cues follow. The mouse wheel scrolls the pane under the pointer and keeps the
+selected scenario. PageUp/PageDown scroll details. Unavailable scenarios show
+the error in Metadata and refuse to open. An empty registry shows registration
+guidance.
 Theme roles distinguish the two panes, headings, dates and the current selection.
 Calm uses dark text on its blue selection.
 Selection previews the manifest. Enter opens its presenter at step zero.
@@ -120,11 +132,15 @@ and the controls. Start scenario invokes the adapter and prepares the
 environment. Successful preparation shows the first executable step with its
 own narration. Next runs that step. A step contains its ID, title, role,
 narration text, operation timeout, and optional confirmation requirement.
-The presenter reads the text marked **Read aloud**. The presenter window
-combines Back, the current action, Stop, and speaker notes in one movable,
-resizable panel. Controls and narration stay together when moving or resizing.
-The gear beside the scenario title opens a settings popover. A−/A+ changes the
-spoken text size by two points per click within 9–48 points. Left, center, and
+The presenter reads the text marked **Read aloud** below **Info**. Both sections
+use regular-weight body text and distinct labels. The movable, resizable
+presenter places Back on the left, Start or Confirm in the center, Forward
+on the right, and Stop on its own row below. The gear sits at the right of
+the scenario title beside the circled information button. The gear opens
+settings and the information button opens the F7/F9 shortcuts and wait legend.
+The panel initially sits at the lower-right so the left-side contents in the
+browser rehearsals stay reachable. A−/A+ changes the spoken text size by two
+points per click within 9–48 points. Left, center, and
 right alignment apply to narration. Step titles, progress, and wait instructions
 remain left-aligned in the fixed-size **Info** section.
 The 11-point default is half the 0.1.10 default. The initial 360 × 240 point
@@ -140,8 +156,8 @@ Valid legacy speaker-notes.json is imported once when [overlay] is absent, then
 removed after saving; an existing [overlay] takes precedence. Malformed legacy
 JSON is retained with a warning rather than discarded. Broken TOML blocks writes
 and preserves source files. Missing/invalid individual preferences use defaults;
-out-of-range sizes clamp to the range. Native smoke checks exercise both views,
-narration and info styles, all alignments, resizing, and preference reload.
+out-of-range sizes clamp to the range. Native smoke checks exercise both popovers,
+button placement and availability, text styles, alignment, resizing, and preference reload.
 Changing the range affects readability and control bounds.
 Global F7/F9 are available while the helper is alive; there is no hide toggle.
 
@@ -196,9 +212,9 @@ Demio terminates that group and deletes its per-session runtime directory at exi
 A parent crash cannot guarantee cleanup of arbitrary external side effects.
 
 Presenter notes and controls should remain visible to the presenter and absent
-from the demo recording. The native panel and settings popover request legacy
+from the demo recording. The native panel and both popovers request legacy
 capture exclusion (`NSWindow.sharingType = .none`). The native smoke check verifies
-this setting on both windows. Modern macOS ScreenCaptureKit recorders may ignore it.
+this setting. Modern macOS ScreenCaptureKit recorders may ignore it.
 Verify a short saved output with the actual recorder and macOS version. Where the
 flag is ignored, exclude Demio in the recorder or keep the panel outside the
 selected recording region. Screen recording itself, speech synthesis, a phone

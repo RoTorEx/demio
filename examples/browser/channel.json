@@ -1,47 +1,41 @@
 {
   "schema_version": 1,
   "id": "browser-demo",
-  "name": "Browser request walkthrough",
+  "name": "Wikipedia search and scroll",
+  "type": "browser",
+  "development_tokens": {"input": 701009, "cached_input": 692571, "output": 6332, "basis": "allocated"},
   "workspace": ".",
-  "adapter": [
-    ".venv/bin/python",
-    "-u",
-    "adapter.py"
-  ],
+  "adapter": [".venv/bin/python", "-u", "web.py"],
+  "parameters": {"route": "article"},
   "session_seconds": 7200,
+  "intro": "Welcome. We will find and read a public article in a short browser walkthrough.",
   "steps": [
     {
-      "id": "intro",
-      "title": "Meet the requester",
-      "role": "Requester",
-      "say": "I am signed in as the requester. I will create a request, switch to the approver, and show the result."
+      "id": "search",
+      "title": "Type Ada Lovelace in Wikipedia",
+      "role": "Presenter",
+      "say": "I move to Wikipedia's search field and type Ada Lovelace. The matching article appears below the field."
     },
     {
-      "id": "fill",
-      "title": "Describe the request",
-      "role": "Requester",
-      "say": "I enter a short description and a justification. Watch the fields fill in before I submit."
+      "id": "open-article",
+      "title": "Click the Ada Lovelace result",
+      "role": "Presenter",
+      "say": "I click the result in the search suggestions and check the article heading."
     },
     {
-      "id": "submit",
-      "title": "Submit for approval",
-      "role": "Requester",
-      "say": "The request is now submitted. The status changes to Awaiting approval."
-    },
-    {
-      "id": "approve",
-      "title": "Review and approve",
-      "role": "Approver",
-      "say": "I switch to the approver role. Here is the request and its justification. I approve it, and the status updates."
+      "id": "read-article",
+      "title": "Scroll through the article",
+      "role": "Presenter",
+      "say": "I scroll down through the article at a readable pace."
     },
     {
       "id": "close",
-      "title": "Show the final result",
-      "role": "Requester",
-      "say": "Back in the requester view, the request is approved. This concludes the walkthrough."
+      "title": "Close the walkthrough window",
+      "role": "Presenter",
+      "say": "I close the rehearsal window after reading the article."
     }
   ],
   "project": "Demio",
-  "description": "Create a local request as Requester, submit it, approve it as Approver, and verify the Approved result.",
+  "description": "Search Wikipedia, click the real article, scroll and close the rehearsal window.",
   "created_at": "2026-10-14T12:39:09.558352+02:00"
 }

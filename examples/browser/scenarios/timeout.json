@@ -2,12 +2,26 @@
   "schema_version": 1,
   "id": "browser-timeout",
   "name": "Wikipedia late navigation and stop",
+  "type": "browser",
+  "development_tokens": {"input": 2236838, "cached_input": 2218476, "output": 11584, "basis": "allocated"},
   "description": "Wait for a real article section to open and inspect what happens when the browser event arrives after its deadline.",
-  "intro": "Welcome. This scenario shows what the presenter sees after a browser wait expires.",
+  "intro": "Welcome. We will find an article on Wikipedia and see what happens when a browser wait expires.",
   "parameters": {
     "route": "timeout"
   },
   "steps": [
+    {
+      "id": "search",
+      "title": "Type Ada Lovelace in Wikipedia",
+      "role": "Presenter",
+      "say": "I move to Wikipedia's search field and type Ada Lovelace. The matching article appears below the field."
+    },
+    {
+      "id": "open-article",
+      "title": "Click the Ada Lovelace result",
+      "role": "Presenter",
+      "say": "I click the result in the search suggestions and check the article heading."
+    },
     {
       "id": "biography",
       "title": "Open Biography",
@@ -25,7 +39,13 @@
       "id": "read-work",
       "title": "Read the Work section",
       "role": "Presenter",
-      "say": "This step follows a verified navigation to Work within the deadline."
+      "say": "When Work opens within the deadline, I scroll down to read the section."
+    },
+    {
+      "id": "close",
+      "title": "Close the walkthrough window",
+      "role": "Presenter",
+      "say": "I close the rehearsal window after reading Work."
     }
   ]
 }

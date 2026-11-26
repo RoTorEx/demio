@@ -2,6 +2,8 @@
   "schema_version": 1,
   "id": "mac-file-walkthrough",
   "name": "Mac file walkthrough",
+  "type": "system",
+  "development_tokens": {"input": 1009257, "cached_input": 999283, "output": 6111, "basis": "allocated"},
   "description": "Create a unique text file in Terminal, append a line, and open the verified file in TextEdit.",
   "intro": "Welcome. This Mac rehearsal shows a small file moving from Terminal to a visible document window.",
   "adapter": ["python3", "-u", "shared/mac_file.py"],

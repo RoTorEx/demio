@@ -2,6 +2,8 @@
   "schema_version": 1,
   "id": "browser-download",
   "name": "IANA download, timer and confirmation",
+  "type": "browser",
+  "development_tokens": {"input": 2236849, "cached_input": 2218479, "output": 11593, "basis": "allocated"},
   "description": "Browse the official IANA release history, wait, download published time zone data, and confirm before continuing.",
   "intro": "Welcome. We will read a real time zone release and verify the data the browser downloads from IANA.",
   "parameters": {
@@ -9,6 +11,12 @@
     "release": "2026f"
   },
   "steps": [
+    {
+      "id": "release-history",
+      "title": "Open IANA Release History",
+      "role": "Presenter",
+      "say": "From IANA's Time Zones page, I move to the Release History link and click it."
+    },
     {
       "id": "release",
       "title": "Open the published release",
@@ -26,7 +34,7 @@
       "title": "Download and confirm the data",
       "role": "Presenter",
       "say": "I download the data-only archive. Demio checks the browser's download and verifies the release inside it.",
-      "wait": "Check the download in Chromium, then confirm completion.",
+      "wait": "Check the download in Chrome, then choose Confirm.",
       "confirm": true
     },
     {
@@ -34,6 +42,12 @@
       "title": "Return to release history",
       "role": "Presenter",
       "say": "I return to IANA's release history after confirming the download."
+    },
+    {
+      "id": "close",
+      "title": "Close the walkthrough window",
+      "role": "Presenter",
+      "say": "I close the rehearsal window. The verified archive stays with this session until Stop."
     }
   ]
 }

@@ -39,9 +39,10 @@ choices before implementing behavior. The README retains the agreed brief.
 Existing decisions stay in effect; routine implementation choices do not need
 repeated approval. See [the authoring instructions](../templates/demo/AGENTS.md).
 
-Use the four generated browser rehearsals for live presentations. The original
-`examples/browser/channel.json` remains at its historical path for existing
-source-checkout registrations and browser interaction tests.
+Use the four generated browser rehearsals for live presentations.
+`examples/browser/channel.json` is a standalone Wikipedia search, scroll and
+close example with its original ID. It uses the same adapter as the scaffold
+and expects the Python environment described in the README beside the example.
 
 ## Demo defaults and scenario differences
 
@@ -69,6 +70,7 @@ A scenario references its owner and changes only the necessary defaults:
   "demo": "../../demo.json",
   "id": "XYZ789",
   "name": "Role change",
+  "type": "browser",
   "description": "Inspect retained access after a role change.",
   "parameters": {"query": "Find retained access"},
   "steps": [
@@ -88,12 +90,14 @@ overrides resolve beside that scenario file. Commands execute in that workspace.
 | Field | Purpose and editing guidance |
 | --- | --- |
 | `name`, `project` | Readable scenario and project names. Editing these does not change its stable identity. |
+| `type` | Optional display metadata. Use `browser` or `system`; existing manifests without it display Unspecified. |
+| `development_tokens` | Optional development usage with `input`, `cached_input`, `output`, and `basis` (`measured` or `allocated`). |
 | `description` | Explain the visible flow and expected result shown in the detail pane. |
 | `intro` | Optional step-zero narration before Start prepares the demo. Use a cue distinct from the first action. |
 | `steps[].title` | The step's human-readable heading. |
 | `steps[].role` | The role displayed to the presenter; it does not switch application accounts itself. |
 | `steps[].say` | Text the presenter reads aloud. It does not execute actions or synthesize speech. |
-| `steps[].wait` | Optional. What to wait for before pressing F9, and why, such as a slow reply the next step depends on. Shown in red. |
+| `steps[].wait` | Optional. What to wait for before advancing, such as a slow reply the next step depends on. Shown in red. |
 | `steps[].confirm` | Optional boolean. When true, a successful run waits for presenter confirmation before Next becomes available. |
 | `steps[].timeout_seconds` | Optional per-operation timeout: 1–3,600 seconds, default 120. |
 | `session_seconds` | Session time limit: 1–86,400 seconds, default 7,200. |
@@ -106,6 +110,15 @@ overrides resolve beside that scenario file. Commands execute in that workspace.
 | `steps[].id` | Unique action identifier understood by the adapter. Preserve it unless also updating the adapter. |
 | `created_at` | Original creation timestamp; preserve it when editing. `init` sets it and registration fills it when absent. |
 | `schema_version` | Keep `1`; unknown JSON fields are rejected. JSON does not support comments. |
+
+Development tokens describe the recorded authoring work. The total is input
+plus output. Cached input is included in input and displayed separately.
+`measured` identifies usage recorded for a single scenario. `allocated`
+identifies an estimate from shared work. The public examples use the actual
+counters from 43 recorded source-edit and browser verification requests.
+Requests shared by several scenarios are divided evenly among the applicable
+scenarios. The counts describe that sample of development work. Missing
+usage displays Unrecorded in Metadata.
 
 A step object can look like this:
 

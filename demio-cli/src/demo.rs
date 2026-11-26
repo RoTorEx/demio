@@ -81,13 +81,12 @@ impl Demo {
         Ok(paths)
     }
     pub fn info(&self, path: &Path) -> Result<DemoInfo> {
-        let manifest = path.canonicalize()?;
         Ok(DemoInfo {
             id: self.id.clone(),
             name: self.name.clone(),
             description: self.description.clone(),
-            folder: manifest.parent().context("Demo has no folder")?.into(),
-            manifest,
+            folder: path.parent().context("Demo has no folder")?.into(),
+            manifest: path.into(),
         })
     }
 }
@@ -97,7 +96,7 @@ pub fn is_demo(path: &Path) -> Result<bool> {
     Ok(document.get("scenarios").is_some())
 }
 
-pub fn scenario_document(path: &Path) -> Result<Value> {
+pub fn scenario_document(path: &Path) -> Result<(Value, Option<DemoInfo>)> {
     let mut document: Value = serde_json::from_slice(
         &fs::read(path).with_context(|| format!("Read {}", path.display()))?,
     )
@@ -110,21 +109,21 @@ pub fn scenario_document(path: &Path) -> Result<Value> {
             .canonicalize()
             .context("Demo manifest does not exist")?;
         let demo = Demo::load(&demo_path)?;
-        let scenario_path = path.canonicalize()?;
         let demo_folder = demo_path.parent().context("Demo has no folder")?;
-        if !scenario_path.starts_with(demo_folder)
-            || !demo.scenarios.iter().any(|relative| {
-                !relative.is_absolute()
-                    && demo_folder.join(relative).canonicalize().ok().as_ref()
-                        == Some(&scenario_path)
-            })
-        {
+        let listed = path.strip_prefix(demo_folder).ok().is_some_and(|member| {
+            demo.scenarios.iter().any(|relative| relative == member)
+                || demo.scenarios.iter().any(|relative| {
+                    !relative.is_absolute()
+                        && demo_folder.join(relative).canonicalize().ok().as_deref() == Some(path)
+                })
+        });
+        if !listed {
             bail!("Scenario is not listed in its demo manifest");
         }
-        let folder = demo_path.parent().context("Demo has no folder")?;
+        let info = demo.info(&demo_path)?;
         let mut inherited = serde_json::json!({
             "project": demo.project,
-            "workspace": folder.join(demo.workspace),
+            "workspace": demo_folder.join(demo.workspace),
             "adapter": demo.adapter,
         });
         if let Some(seconds) = demo.session_seconds {
@@ -143,6 +142,7 @@ pub fn scenario_document(path: &Path) -> Result<Value> {
         }
         document["parameters"] = serde_json::to_value(parameters)?;
         document["demo"] = serde_json::to_value(demo_path)?;
+        return Ok((document, Some(info)));
     }
-    Ok(document)
+    Ok((document, None))
 }

@@ -37,14 +37,17 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
     private let initialContentSize = NSSize(width: 360, height: 240)
     var notes: NSPanel!
     var back: NSButton!
-    var primary: NSButton!
+    var startOrConfirm: NSButton!
+    var next: NSButton!
     var stop: NSButton!
     var frame: PresenterFrame?
     let cue = NSTextView()
     let title = NSTextField(labelWithString: "Demio")
     let status = NSTextField(labelWithString: "Ready")
     let settingsPopover = NSPopover()
+    let helpPopover = NSPopover()
     var settingsButton: NSButton!
+    var helpButton: NSButton!
     var last = Data()
     var keys: [EventHotKeyRef?] = []
     var timer: Timer?
@@ -100,21 +103,20 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
                 .font: font, .foregroundColor: color, .paragraphStyle: paragraph,
             ]))
         }
-        if !frame.say.isEmpty {
-            append("👤  Read aloud\n", font: labelFont)
-            append(frame.say + "\n", font: .systemFont(ofSize: fontSize, weight: .medium),
-                   alignment: textAlignment)
-            append("\n", font: infoFont)
-        }
         append("❕  Info\n", font: labelFont)
         if !frame.title.isEmpty && frame.title != frame.status {
-            append(frame.title + "\n", font: labelFont)
+            append(frame.title + "\n", font: infoFont)
         }
         if !frame.detail.isEmpty {
             append(frame.detail + "\n", font: infoFont)
         }
         if !frame.wait.isEmpty {
-            append("Wait: \(frame.wait)", font: infoFont, color: .systemRed)
+            append("Wait: \(frame.wait)\n", font: infoFont, color: .systemRed)
+        }
+        if !frame.say.isEmpty {
+            append("\n", font: infoFont)
+            append("👤  Read aloud\n", font: labelFont)
+            append(frame.say, font: .systemFont(ofSize: fontSize), alignment: textAlignment)
         }
         if !cue.attributedString().isEqual(to: content) {
             cue.textStorage?.setAttributedString(content)
@@ -170,16 +172,62 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         settingsPopover.delegate = self
         applyTextStyle()
     }
-    @objc func toggleSettings() {
-        if settingsPopover.isShown {
-            settingsPopover.close()
+    func buildHelp() {
+        let legend = NSTextField(wrappingLabelWithString: """
+        F7   Back to a completed step
+        F9   Forward when available
+        Use Fn with F7/F9 if needed.
+
+        ❕ Info   Step, status and wait cues
+        👤 Read aloud   Presenter narration
+        Wait   Advance after the result or confirmation
+        """)
+        legend.font = .systemFont(ofSize: 11)
+        legend.translatesAutoresizingMaskIntoConstraints = false
+        let controller = NSViewController()
+        let size = NSSize(width: 270, height: 130)
+        controller.view = NSView(frame: NSRect(origin: .zero, size: size))
+        controller.view.addSubview(legend)
+        NSLayoutConstraint.activate([
+            legend.leadingAnchor.constraint(equalTo: controller.view.leadingAnchor, constant: 12),
+            legend.trailingAnchor.constraint(equalTo: controller.view.trailingAnchor, constant: -12),
+            legend.topAnchor.constraint(equalTo: controller.view.topAnchor, constant: 10),
+            legend.bottomAnchor.constraint(lessThanOrEqualTo: controller.view.bottomAnchor, constant: -10),
+        ])
+        helpPopover.contentViewController = controller
+        helpPopover.contentSize = size
+        helpPopover.behavior = .transient
+        helpPopover.animates = false
+        helpPopover.delegate = self
+    }
+    func toggle(_ popover: NSPopover, from button: NSButton, closing other: NSPopover) {
+        if popover.isShown {
+            popover.close()
         } else {
-            settingsPopover.show(relativeTo: settingsButton.bounds, of: settingsButton, preferredEdge: .minY)
-            settingsPopover.contentViewController?.view.window?.sharingType = .none
+            other.close()
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            popover.contentViewController?.view.window?.sharingType = .none
         }
     }
+    @objc func toggleSettings() { toggle(settingsPopover, from: settingsButton, closing: helpPopover) }
+    @objc func toggleHelp() { toggle(helpPopover, from: helpButton, closing: settingsPopover) }
     func popoverDidShow(_ notification: Notification) {
-        settingsPopover.contentViewController?.view.window?.sharingType = .none
+        (notification.object as? NSPopover)?.contentViewController?.view.window?.sharingType = .none
+    }
+    func button(_ label: String, symbol: String, action: Selector, iconOnly: Bool = false) -> NSButton {
+        let control = NSButton(title: label, target: self, action: action)
+        control.bezelStyle = .rounded
+        control.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        control.imagePosition = iconOnly ? .imageOnly : .imageLeading
+        control.setAccessibilityLabel(label)
+        control.refusesFirstResponder = true
+        if iconOnly {
+            control.isBordered = false
+            control.toolTip = label
+            control.widthAnchor.constraint(equalToConstant: 25).isActive = true
+            control.heightAnchor.constraint(equalToConstant: 23).isActive = true
+        }
+        return control
     }
     func panel(_ rect: NSRect, title: String, resizable: Bool) -> NSPanel {
         var style: NSWindow.StyleMask = [.titled, .nonactivatingPanel]
@@ -205,48 +253,41 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
     }
     func applicationDidFinishLaunching(_ notification: Notification) {
         restoreSettings()
-        let screen = NSScreen.main?.visibleFrame
-        let origin = NSPoint(x: (screen?.minX ?? 0) + 25, y: (screen?.maxY ?? 850) - initialContentSize.height - 80)
+        let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
+        let origin = NSPoint(x: screen.maxX - initialContentSize.width - 25, y: screen.minY + 25)
         notes = panel(NSRect(origin: origin, size: initialContentSize), title: "Demio", resizable: true)
         notes.contentMinSize = NSSize(width: 320, height: 200)
         let row = NSStackView()
         row.orientation = .horizontal
-        row.distribution = .fill
-        row.spacing = 10
-        back = NSButton(title: "← Back", target: self, action: #selector(previous))
-        primary = NSButton(title: "Start scenario", target: self, action: #selector(performPrimary))
-        stop = NSButton(title: "Stop", target: self, action: #selector(stopScenario))
-        for button in [back!, primary!, stop!] {
-            button.bezelStyle = .rounded
-            row.addArrangedSubview(button)
-        }
-        back.setContentHuggingPriority(.defaultHigh, for: .horizontal)
-        stop.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        row.distribution = .fillEqually
+        row.detachesHiddenViews = false
+        row.spacing = 8
+        back = button("Back", symbol: "arrow.left", action: #selector(previous))
+        startOrConfirm = button("Start", symbol: "play.fill", action: #selector(performPrimary))
+        next = button("Forward", symbol: "arrow.right", action: #selector(forward))
+        next.imagePosition = .imageTrailing
+        stop = button("Stop", symbol: "stop.fill", action: #selector(stopScenario))
+        [back!, startOrConfirm!, next!].forEach(row.addArrangedSubview)
         let body = NSStackView()
         body.orientation = .vertical
-        body.alignment = .leading
+        body.alignment = .centerX
         body.spacing = 8
         body.translatesAutoresizingMaskIntoConstraints = false
         title.font = .systemFont(ofSize: 13, weight: .semibold)
         title.lineBreakMode = .byTruncatingTail
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        title.setContentHuggingPriority(.defaultLow, for: .horizontal)
         status.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
         status.lineBreakMode = .byTruncatingTail
         status.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        settingsButton = NSButton(title: "⚙", target: self, action: #selector(toggleSettings))
-        if let gear = NSImage(systemSymbolName: "gearshape", accessibilityDescription: "Settings") {
-            settingsButton.image = gear
-            settingsButton.imagePosition = .imageOnly
-        }
-        settingsButton.isBordered = false
-        settingsButton.toolTip = "Presenter settings"
-        settingsButton.setAccessibilityLabel("Settings")
-        settingsButton.widthAnchor.constraint(equalToConstant: 25).isActive = true
-        settingsButton.heightAnchor.constraint(equalToConstant: 23).isActive = true
-        let header = NSStackView(views: [title, settingsButton])
+        settingsButton = button("Settings", symbol: "gearshape", action: #selector(toggleSettings), iconOnly: true)
+        helpButton = button("Shortcuts and legend", symbol: "info.circle", action: #selector(toggleHelp), iconOnly: true)
+        let header = NSStackView(views: [title, settingsButton, helpButton])
+        header.distribution = .fill
         header.alignment = .centerY
         header.spacing = 4
         buildSettings()
+        buildHelp()
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
@@ -261,10 +302,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         cue.textContainer?.widthTracksTextView = true
         cue.textContainer?.containerSize = NSSize(width: initialContentSize.width - 30, height: CGFloat.greatestFiniteMagnitude)
         scroll.documentView = cue
-        // With macOS keyboard navigation on, the first button (Back) would hold focus and Space would
-        // send the presenter back a step. Only clicks and F7/F9 may navigate.
-        for button in [back!, primary!, stop!, settingsButton!] { button.refusesFirstResponder = true }
-        for view in [header, status, scroll, row] as [NSView] { body.addArrangedSubview(view) }
+        for view in [header, status, scroll, row, stop!] as [NSView] { body.addArrangedSubview(view) }
         notes.contentView!.addSubview(body)
         NSLayoutConstraint.activate([
             body.leadingAnchor.constraint(equalTo: notes.contentView!.leadingAnchor, constant: 12),
@@ -302,13 +340,17 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
             }
         }
         guard notes.sharingType == .none else { exit(11) }
+        let buttons = [back!, startOrConfirm!, next!, stop!, settingsButton!, helpButton!]
         guard NSApp.windows.filter({ $0.isVisible }).count == 1,
-              back.window === notes, primary.window === notes, stop.window === notes,
-              settingsButton.window === notes, cue.window === notes,
+              buttons.allSatisfy({ $0.window === notes && $0.image != nil }), cue.window === notes,
               notes.contentView?.bounds.size == initialContentSize, narrationSize() == fontSize,
-              notes.styleMask.contains(.resizable), cue.string.contains("👤  Read aloud"),
-              cue.string.contains("❕  Info"), frame?.channel == title.stringValue,
-              let originalInfoFont = attributes(at: "❕  Info")?[.font] as? NSFont else { exit(3) }
+              notes.styleMask.contains(.resizable),
+              let infoRange = cue.string.range(of: "❕  Info"),
+              let readRange = cue.string.range(of: "👤  Read aloud"),
+              infoRange.lowerBound < readRange.lowerBound, frame?.channel == title.stringValue,
+              let initialFrame = frame,
+              attributes(at: initialFrame.say)?[.font] as? NSFont == .systemFont(ofSize: fontSize),
+              attributes(at: initialFrame.detail)?[.font] as? NSFont == .systemFont(ofSize: 10) else { exit(3) }
         let original = notes.frame
         notes.setFrame(NSRect(x: original.minX+30, y: original.minY+20, width: 600, height: 360), display: true)
         notes.contentView?.layoutSubtreeIfNeeded()
@@ -316,9 +358,25 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         notes.setContentSize(notes.contentMinSize)
         notes.contentView?.layoutSubtreeIfNeeded()
         guard let content = notes.contentView else { exit(12) }
-        for control in [back!, primary!, stop!, settingsButton!] {
+        for control in buttons {
             let rect = control.convert(control.bounds, to: content)
-            guard content.bounds.contains(rect), rect.width > 0, rect.height > 0 else { exit(12) }
+            guard content.bounds.contains(rect), rect.width > 0, rect.height > 0 else {
+                fputs("Presenter control \(control.title) \(rect) is outside \(content.bounds).\n", stderr)
+                exit(12)
+            }
+        }
+        let center = startOrConfirm.convert(startOrConfirm.bounds, to: content)
+        let backRect = back.convert(back.bounds, to: content)
+        let nextRect = next.convert(next.bounds, to: content)
+        let stopRect = stop.convert(stop.bounds, to: content)
+        let gearRect = settingsButton.convert(settingsButton.bounds, to: content)
+        let helpRect = helpButton.convert(helpButton.bounds, to: content)
+        guard backRect.maxX < center.minX, center.maxX < nextRect.minX,
+              abs(center.midX - content.bounds.midX) < 2,
+              stopRect.maxY < center.minY, gearRect.maxX < helpRect.minX,
+              content.bounds.maxX - helpRect.maxX < 16 else {
+            fputs("Presenter positions: \([backRect, center, nextRect, stopRect, gearRect, helpRect]) in \(content.bounds).\n", stderr)
+            exit(12)
         }
         notes.setContentSize(initialContentSize)
         notes.contentView?.layoutSubtreeIfNeeded()
@@ -346,7 +404,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         let originalFont = fontSize
         larger.performClick(nil)
         guard fontSize == min(maximumFontSize, originalFont+2), narrationSize() == fontSize,
-              attributes(at: "❕  Info")?[.font] as? NSFont == originalInfoFont else { exit(5) }
+              attributes(at: initialFrame.detail)?[.font] as? NSFont == .systemFont(ofSize: 10) else { exit(5) }
         smaller.performClick(nil)
         guard fontSize == originalFont else { exit(6) }
         fontSize = minimumFontSize; applyTextStyle(); smaller.performClick(nil)
@@ -366,8 +424,16 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         fontSize = 22; textAlignment = .left; restoreSettings()
         guard fontSize == 30, textAlignment == .right else { exit(8) }
         alignmentPicker.selectedSegment = 0; changeAlignment()
-        settingsButton.performClick(nil)
-        guard !settingsPopover.isShown, notes.sharingType == .none else { exit(16) }
+        helpButton.performClick(nil)
+        guard !settingsPopover.isShown, helpPopover.isShown,
+              let helpContent = helpPopover.contentViewController?.view,
+              let helpWindow = helpContent.window, helpWindow.sharingType == .none,
+              let legend = helpContent.subviews.first as? NSTextField,
+              legend.stringValue.contains("F7"), legend.stringValue.contains("F9"),
+              legend.stringValue.contains("Wait") else { exit(17) }
+        snapshot(helpWindow.contentView?.superview ?? helpContent, as: "shortcuts")
+        helpButton.performClick(nil)
+        guard !helpPopover.isShown, notes.sharingType == .none else { exit(17) }
         let retainedFrame = notes.frame
         let states: [(String, String?, Bool)] = [
             ("Introduction", "start", false), ("Preparing", nil, false), ("Waiting", nil, false),
@@ -382,38 +448,43 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
             guard let data = try? JSONSerialization.data(withJSONObject: state) else { exit(13) }
             do { try data.write(to: session.appendingPathComponent("panel.json")) } catch { exit(13) }
             refresh()
-            guard back.isEnabled == canGoBack, primary.isEnabled == (command != nil), stop.isEnabled,
+            let centerAction = command == "start" || command == "confirm"
+            guard back.isEnabled == canGoBack, startOrConfirm.isEnabled == centerAction,
+                  startOrConfirm.isHidden != centerAction, next.isEnabled == (command == "next"), stop.isEnabled,
                   cue.string.contains("Updated narration"), cue.string.contains("Current step detail"),
                   narrationSize() == fontSize, self.status.stringValue.hasPrefix(status),
                   notes.frame == retainedFrame else { exit(13) }
             if command == "start" || status == "Awaiting confirmation" {
                 forward()
-                primary.performClick(nil)
+                startOrConfirm.performClick(nil)
             }
         }
-        guard [back!, primary!, stop!, settingsButton!].allSatisfy({ $0.refusesFirstResponder }) else { exit(14) }
+        guard buttons.allSatisfy({ $0.refusesFirstResponder }) else { exit(14) }
         let tipState: [String: Any] = ["status": "Ready", "channel": "Native check", "step": "4/5",
             "role": "Presenter", "title": "Tip", "say": "Narration.", "wait": "Copilot's reply",
             "detail": "", "generation": 9, "primary": "next", "can_previous": true]
         guard let tipData = try? JSONSerialization.data(withJSONObject: tipState) else { exit(15) }
         do { try tipData.write(to: session.appendingPathComponent("panel.json")) } catch { exit(15) }
         refresh()
-        guard cue.string.hasSuffix("Wait: Copilot's reply"),
+        guard cue.string.contains("Wait: Copilot's reply"),
               attributes(at: "Wait: Copilot's reply")?[.foregroundColor] as? NSColor == NSColor.systemRed,
-              attributes(at: "Wait: Copilot's reply")?[.font] as? NSFont != attributes(at: "Narration.")?[.font] as? NSFont else { exit(15) }
-        back.performClick(nil); primary.performClick(nil); stop.performClick(nil)
-        fputs("Native UI: compact presenter, separate narration and info, settings popover, capture exclusion, navigation and saved preferences passed.\n", stderr)
+              attributes(at: "Wait: Copilot's reply")?[.font] as? NSFont == .systemFont(ofSize: 10),
+              attributes(at: "Narration.")?[.font] as? NSFont == .systemFont(ofSize: fontSize) else { exit(15) }
+        back.performClick(nil); next.performClick(nil); stop.performClick(nil)
+        fputs("Native UI: button layout and gating, normal body text, settings and shortcuts popovers, capture exclusion and preferences passed.\n", stderr)
         NSApp.terminate(nil)
     }
     @objc func previous() {
         if let frame, frame.canPrevious { send("previous \(frame.generation)") }
     }
     @objc func performPrimary() {
-        if let frame, let command = frame.primary { send("\(command) \(frame.generation)") }
+        if let frame, let command = frame.primary, command == "start" || command == "confirm" {
+            send("\(command) \(frame.generation)")
+        }
     }
     @objc func stopScenario() { send("quit") }
-    func forward() {
-        if frame?.primary == "next" { performPrimary() }
+    @objc func forward() {
+        if let frame, frame.primary == "next" { send("next \(frame.generation)") }
     }
     func refresh() {
         if getppid() != owner { NSApp.terminate(nil); return }
@@ -431,12 +502,14 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
             cue.scrollRangeToVisible(NSRange(location: 0, length: 0))
         }
         back.isEnabled = state.canPrevious
-        primary.isEnabled = state.primary != nil
-        switch state.primary {
-        case "start": primary.title = "Start scenario"
-        case "confirm": primary.title = "Confirm completion"
-        default: primary.title = "Next →"
-        }
+        let confirming = state.primary == "confirm"
+        startOrConfirm.isEnabled = state.primary == "start" || confirming
+        startOrConfirm.isHidden = !startOrConfirm.isEnabled
+        startOrConfirm.title = confirming ? "Confirm" : "Start"
+        startOrConfirm.image = NSImage(systemSymbolName: confirming ? "checkmark" : "play.fill",
+                                       accessibilityDescription: nil)
+        startOrConfirm.setAccessibilityLabel(confirming ? "Confirm completion" : "Start scenario")
+        next.isEnabled = state.primary == "next"
     }
     func installKeys() {
         let callback: EventHandlerUPP = { _, event, pointer in

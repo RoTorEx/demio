@@ -19,15 +19,31 @@ use std::{
 };
 const HELP: &str = "Demio — one remote for project demos\n\nUsage: demio [COMMAND]\n\n  list [--json]                 List demos/scenarios and creation times\n  register FILE [--replace]      Register a demo or scenario manifest\n  unregister ID                 Remove registry entry, preserve project files\n  validate FILE                 Validate demo/scenario without executing code\n  doctor ID                     Ask adapter for a read-only readiness check\n  run ID [--no-overlay] [--auto|--dry-run]  Run by exact scenario ID\n                                --dry-run: narration only, nothing executed\n  init DIRECTORY                Scaffold a demo, scenarios and instructions\n  setup-config                  Create missing configuration\n  config                        Print configuration and path\n  themes                        List themes\n  theme NAME                    Set terminal theme\n  update                        Install latest verified release\n  help / --help                 Show this help\n  version / --version           Show version\n\nWithout a command: select a scenario interactively (list outside a terminal);\nEnter opens the presenter and d opens a rehearsal.\ns  Start scenario    F9  Next    F7  Previous view\nc  Confirm completion    q / Ctrl+C  Stop\n";
 fn main() {
-    if let Ok(home) = registry::product_home() {
-        usage::init("demio", home.join("logs/demio.jsonl"));
-    }
-    let op = usage::Operation::start("command");
-    let result = application();
-    op.finish(
-        if result.is_ok() { "success" } else { "error" },
-        serde_json::json!({}),
-    );
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let command = args.first().map(String::as_str).unwrap_or("");
+    let result = match command {
+        "help" | "--help" | "-h" => {
+            print!("{HELP}");
+            Ok(())
+        }
+        "version" | "--version" | "-V" => {
+            println!("demio {}", env!("CARGO_PKG_VERSION"));
+            Ok(())
+        }
+        "--overlay-settings" => overlay::command(&args[1..]),
+        _ => {
+            if let Ok(home) = registry::product_home() {
+                usage::init("demio", home.join("logs/demio.jsonl"));
+            }
+            let op = usage::Operation::start("command");
+            let result = application(&args, command);
+            op.finish(
+                if result.is_ok() { "success" } else { "error" },
+                serde_json::json!({}),
+            );
+            result
+        }
+    };
     if let Err(error) = result {
         eprintln!("Error: {error:#}");
         std::process::exit(1);
@@ -38,29 +54,16 @@ fn argument<'a>(args: &'a [String], index: usize, usage: &str) -> Result<&'a str
         .map(String::as_str)
         .with_context(|| format!("Usage: {usage}"))
 }
-fn application() -> Result<()> {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let command = args.first().map(String::as_str).unwrap_or("");
+fn application(args: &[String], command: &str) -> Result<()> {
     usage::event(
         "command_selected",
         "started",
         serde_json::json!({"mode":match command {
-            ""=>"default", "help"|"--help"|"-h"=>"help", "version"|"--version"|"-V"=>"version",
+            ""=>"default",
             "list"|"register"|"unregister"|"validate"|"doctor"|"run"|"init"|"setup-config"|"config"|"themes"|"theme"|"update"=>command,
-            "--overlay-settings"=>"overlay_settings", _=>"unknown"
+            _=>"unknown"
         }}),
     );
-    if matches!(command, "help" | "--help" | "-h") {
-        print!("{HELP}");
-        return Ok(());
-    }
-    if matches!(command, "version" | "--version" | "-V") {
-        println!("demio {}", env!("CARGO_PKG_VERSION"));
-        return Ok(());
-    }
-    if command == "--overlay-settings" {
-        return overlay::command(&args[1..]);
-    }
     let cancelled = Arc::new(AtomicBool::new(false));
     let signal = cancelled.clone();
     ctrlc::set_handler(move || signal.store(true, Ordering::Relaxed))?;
@@ -70,8 +73,7 @@ fn application() -> Result<()> {
             if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
                 return list(&config, false);
             }
-            if let Some((id, dry)) = selector::choose(&config, &cancelled)? {
-                let (channel, path) = config.resolve(&id)?;
+            if let Some((channel, path, dry)) = selector::choose(&config, &cancelled)? {
                 run::run(channel, path, &config.theme, false, false, dry, cancelled)?;
             }
         }
@@ -85,7 +87,7 @@ fn application() -> Result<()> {
             if args.len() > 3 || (args.len() == 3 && args[2] != "--replace") {
                 bail!("Usage: demio register FILE [--replace]");
             }
-            let path = Path::new(argument(&args, 1, "demio register FILE [--replace]")?);
+            let path = Path::new(argument(args, 1, "demio register FILE [--replace]")?);
             let ids = if demo::is_demo(path)? {
                 config.register_demo(path, args.get(2).is_some())?
             } else {
@@ -96,7 +98,7 @@ fn application() -> Result<()> {
             }
         }
         "unregister" => {
-            let id = argument(&args, 1, "demio unregister ID")?;
+            let id = argument(args, 1, "demio unregister ID")?;
             if config.channels.remove(id).is_none() {
                 bail!("Unknown channel ID: {id}");
             }
@@ -104,7 +106,7 @@ fn application() -> Result<()> {
             println!("Unregistered {id}; project files preserved");
         }
         "validate" => {
-            let path = Path::new(argument(&args, 1, "demio validate FILE")?).canonicalize()?;
+            let path = Path::new(argument(args, 1, "demio validate FILE")?).canonicalize()?;
             let paths = if demo::is_demo(&path)? {
                 demo::Demo::load(&path)?.scenario_paths(&path)?
             } else {
@@ -122,11 +124,11 @@ fn application() -> Result<()> {
             }
         }
         "doctor" => {
-            let (channel, path) = config.resolve(argument(&args, 1, "demio doctor ID")?)?;
+            let (channel, path) = config.resolve(argument(args, 1, "demio doctor ID")?)?;
             run::doctor(&channel, &path, &cancelled)?;
         }
         "run" => {
-            let id = argument(&args, 1, "demio run ID [--no-overlay] [--auto|--dry-run]")?;
+            let id = argument(args, 1, "demio run ID [--no-overlay] [--auto|--dry-run]")?;
             for option in args.iter().skip(2) {
                 if !matches!(option.as_str(), "--auto" | "--no-overlay" | "--dry-run") {
                     bail!("Unknown run option: {option}");
@@ -167,7 +169,7 @@ fn application() -> Result<()> {
             }
         }
         "theme" => {
-            let theme = argument(&args, 1, "demio theme NAME")?;
+            let theme = argument(args, 1, "demio theme NAME")?;
             if !THEMES.contains(&theme) {
                 bail!("Unknown theme; run demio themes");
             }
@@ -175,7 +177,7 @@ fn application() -> Result<()> {
             config.save()?;
             println!("Theme: {theme}");
         }
-        "init" => scaffold(Path::new(argument(&args, 1, "demio init DIRECTORY")?))?,
+        "init" => scaffold(Path::new(argument(args, 1, "demio init DIRECTORY")?))?,
         "update" => {
             let script = std::env::current_exe()?
                 .parent()

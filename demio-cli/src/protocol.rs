@@ -3,23 +3,61 @@ use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 use std::{
     fs,
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader, Read, Write},
     os::unix::process::CommandExt,
     path::Path,
     process::{Child, ChildStdin, Command, Stdio},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
-        mpsc::{self, Receiver, Sender},
+        mpsc::{self, Receiver, Sender, SyncSender},
     },
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
 
 pub enum Event {
-    Progress { detail: String, waiting: bool },
     Done(Result<Value>),
     CleanupComplete,
+}
+
+pub struct Progress {
+    pub detail: String,
+    pub waiting: bool,
+}
+
+const MAX_REPLY_BYTES: usize = 1024 * 1024;
+
+fn read_replies(mut stdout: impl BufRead, replies: SyncSender<Result<Value>>) {
+    let mut buffer = Vec::new();
+    loop {
+        buffer.clear();
+        // Allow CRLF after a full-size reply. Reject longer payloads before EOF.
+        match (&mut stdout)
+            .take((MAX_REPLY_BYTES + 2) as u64)
+            .read_until(b'\n', &mut buffer)
+        {
+            Ok(0) => break,
+            Ok(_) => (),
+            Err(error) => {
+                let _ = replies.send(Err(error.into()));
+                break;
+            }
+        }
+        let line = buffer
+            .strip_suffix(b"\n")
+            .map(|line| line.strip_suffix(b"\r").unwrap_or(line))
+            .unwrap_or(&buffer);
+        if line.len() > MAX_REPLY_BYTES {
+            let _ = replies.send(Err(anyhow::anyhow!("Adapter reply exceeded one MiB")));
+            break;
+        }
+        let reply =
+            serde_json::from_slice(line).context("Adapter stdout must contain JSON lines only");
+        if replies.send(reply).is_err() {
+            break;
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -52,6 +90,7 @@ pub struct Operation {
 pub struct Worker {
     tx: Option<Sender<Operation>>,
     pub events: Receiver<Event>,
+    progress: Arc<Mutex<Option<Progress>>>,
     child: Arc<Mutex<Child>>,
     handle: Option<JoinHandle<()>>,
 }
@@ -60,9 +99,10 @@ struct Adapter {
     replies: Receiver<Result<Value>>,
     sequence: u64,
     session: String,
+    progress: Arc<Mutex<Option<Progress>>>,
 }
 impl Adapter {
-    fn call(&mut self, op: &Operation, events: &Sender<Event>) -> Result<Value> {
+    fn call(&mut self, op: &Operation) -> Result<Value> {
         self.sequence += 1;
         let id = self.sequence;
         serde_json::to_writer(
@@ -92,16 +132,18 @@ impl Adapter {
             }
             match reply.get("event").and_then(Value::as_str) {
                 Some("status") => {
-                    let _ = events.send(Event::Progress {
-                        detail: reply
-                            .get("detail")
-                            .and_then(Value::as_str)
-                            .unwrap_or("Working")
-                            .chars()
-                            .take(500)
-                            .collect(),
-                        waiting: reply.get("waiting").and_then(Value::as_bool) == Some(true),
-                    });
+                    if let Ok(mut progress) = self.progress.lock() {
+                        *progress = Some(Progress {
+                            detail: reply
+                                .get("detail")
+                                .and_then(Value::as_str)
+                                .unwrap_or("Working")
+                                .chars()
+                                .take(500)
+                                .collect(),
+                            waiting: reply.get("waiting").and_then(Value::as_bool) == Some(true),
+                        });
+                    }
                 }
                 Some("done") => match reply.get("ok").and_then(Value::as_bool) {
                     Some(true) => return Ok(reply),
@@ -144,32 +186,21 @@ impl Worker {
         let stdin = child.stdin.take().context("Adapter stdin unavailable")?;
         let stdout = child.stdout.take().context("Adapter stdout unavailable")?;
         let child = Arc::new(Mutex::new(child));
-        let (reply_tx, replies) = mpsc::channel();
-        thread::spawn(move || {
-            for line in BufReader::new(stdout).lines() {
-                let reply = line.map_err(anyhow::Error::from).and_then(|line| {
-                    if line.len() > 1_048_576 {
-                        bail!("Adapter reply exceeded one MiB");
-                    }
-                    serde_json::from_str(&line)
-                        .context("Adapter stdout must contain JSON lines only")
-                });
-                if reply_tx.send(reply).is_err() {
-                    break;
-                }
-            }
-        });
+        let (reply_tx, replies) = mpsc::sync_channel(4);
+        thread::spawn(move || read_replies(BufReader::new(stdout), reply_tx));
+        let progress = Arc::new(Mutex::new(None));
         let mut adapter = Adapter {
             stdin,
             replies,
             sequence: 0,
             session: session.to_string_lossy().into(),
+            progress: progress.clone(),
         };
         let (tx, requests) = mpsc::channel();
         let (event_tx, events) = mpsc::channel();
         let handle = thread::spawn(move || {
             while let Ok(operation) = requests.recv() {
-                let result = adapter.call(&operation, &event_tx);
+                let result = adapter.call(&operation);
                 if operation.op == "cleanup" {
                     let _ = event_tx.send(Event::CleanupComplete);
                     break;
@@ -182,11 +213,13 @@ impl Worker {
         Ok(Self {
             tx: Some(tx),
             events,
+            progress,
             child,
             handle: Some(handle),
         })
     }
     pub fn send(&self, op: &str, step: Option<&str>, timeout: u64) -> Result<()> {
+        let _ = self.take_progress();
         self.tx
             .as_ref()
             .context("Adapter already closed")?
@@ -197,6 +230,10 @@ impl Worker {
             })?;
         Ok(())
     }
+    pub fn take_progress(&self) -> Option<Progress> {
+        self.progress.lock().ok()?.take()
+    }
+
     pub fn wait(&self, cancelled: &AtomicBool, deadline: Option<Instant>) -> Result<Value> {
         loop {
             let poll = Duration::from_millis(100);
@@ -208,14 +245,17 @@ impl Worker {
             if cancelled.load(Ordering::Relaxed) {
                 bail!("Cancelled");
             }
-            match self.events.recv_timeout(poll.min(remaining)) {
+            let event = self.events.recv_timeout(poll.min(remaining));
+            if let Some(progress) = self.take_progress() {
+                eprintln!("{}", progress.detail);
+            }
+            match event {
                 Ok(Event::Done(result)) => {
                     if deadline.is_some_and(|end| Instant::now() >= end) {
                         return Err(SessionExpired.into());
                     }
                     return result;
                 }
-                Ok(Event::Progress { detail, .. }) => eprintln!("{detail}"),
                 Ok(Event::CleanupComplete) => bail!("Adapter has closed"),
                 Err(mpsc::RecvTimeoutError::Timeout) => (),
                 Err(error) => return Err(error.into()),
@@ -264,5 +304,38 @@ impl Drop for Worker {
         if let Some(handle) = self.handle.take() {
             let _ = handle.join();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn reads_a_reply_at_the_limit_with_crlf() {
+        let mut bytes = br#"{"id":1,"event":"done","ok":true}"#.to_vec();
+        bytes.resize(MAX_REPLY_BYTES, b' ');
+        bytes.extend_from_slice(b"\r\n");
+        let (sender, receiver) = mpsc::sync_channel(1);
+        read_replies(Cursor::new(bytes), sender);
+        assert_eq!(receiver.recv().unwrap().unwrap()["ok"], true);
+    }
+
+    #[test]
+    fn rejects_an_oversized_line_without_reading_its_end() {
+        let source = Cursor::new(vec![b'x'; MAX_REPLY_BYTES * 3]);
+        let mut reader = BufReader::new(source);
+        let (sender, receiver) = mpsc::sync_channel(1);
+        read_replies(&mut reader, sender);
+        assert!(
+            receiver
+                .recv()
+                .unwrap()
+                .unwrap_err()
+                .to_string()
+                .contains("one MiB")
+        );
+        assert!(reader.get_ref().position() < (MAX_REPLY_BYTES * 2) as u64);
     }
 }

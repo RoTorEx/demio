@@ -98,11 +98,13 @@ before adapting it. Registration accepts demo.json (all declared scenarios) or a
 single scenario JSON. Run and doctor use a stable **scenario ID** printed by list.
 Legacy standalone manifests remain supported.
 
-The two-pane TUI shows grouped scenarios and creation dates on the left. The
-right pane previews the introduction, step order, wait and confirmation cues,
-then shows source paths and settings. ↑/↓ or j/k changes selection. Enter opens
-the presenter at step zero, and d opens a dry rehearsal. PgUp/PgDn scrolls the
-right pane. Press e to open the demo root and scenario in VS Code, f to reveal
+The left pane groups scenarios and shows ID, short creation date (DD.MM.YY)
+and name. Long cells end in an ellipsis. The right pane starts with Metadata,
+including the full ID, type, project, creation date/time and source paths.
+Description, introduction and steps follow. The wheel scrolls the pane under
+the pointer. ↑/↓ or j/k changes selection. Enter opens the presenter at step zero,
+and d opens a dry rehearsal. PgUp/PgDn scrolls the right pane. Press e to open the
+demo root and scenario in VS Code, f to reveal
 the scenario in Finder, or q/Esc to quit. Non-terminal output remains a plain
 list. `demio list --json` includes stable IDs and source paths.
 
@@ -126,13 +128,14 @@ See [Editing demos and scenarios](docs/scenarios.md) and the
 Pressing Enter on a scenario opens one movable presenter window on step **0**, the
 introduction. **Start scenario** opens the adapter and prepares its windows and
 data. Once preparation succeeds the presenter shows the distinct first step.
-**Next** starts that step. The panel shows the current role, step, status and
-notes, which wrap and scroll as the window resizes.
+**Forward** starts that step. **Back**, **Start** or **Confirm**, and **Forward**
+sit on one row. **Stop** has its own row below. **Info** precedes **Read aloud**,
+and both sections wrap and scroll as the window resizes.
 The panel opens with a 360 × 240 pt content area and 11 pt notes by default.
-Open **Settings** next to the scenario title to change the size or alignment of
-the **Read aloud** text. **Info** uses a fixed font for step titles,
-progress, and wait instructions. The shared config.toml stores these preferences
-under `[overlay]`.
+Open the gear on the right of the title to change the size or alignment of
+**Read aloud**. The adjacent **ⓘ** opens keyboard shortcuts and the wait legend.
+**Info** uses a fixed font for step titles, progress and wait instructions.
+The shared config.toml stores presenter preferences under `[overlay]`.
 
 ```toml
 [overlay]
@@ -166,7 +169,7 @@ may open or focus read-only rehearsal views. Outside a terminal the command
 prints the introduction and script. `--auto` executes a live run directly and
 requires a scenario without manual confirmation steps.
 
-The presenter and its settings popover request legacy capture exclusion
+The presenter and both popovers request legacy capture exclusion
 (`NSWindow.sharingType = .none`).
 For a recording with the presenter visible, select the demo application window
 or use a display recorder that explicitly excludes Demio. With region capture,
@@ -176,18 +179,19 @@ with the legacy flag set. [ScreenCaptureKit capture filters](https://developer.a
 
 ## Rehearsals
 
-Use `demio init` in a fresh directory to generate the reference rehearsals. The
-browser adapter uses a new Chromium profile, a fixed viewport, English locale,
-and light appearance. The walkthroughs use live Wikipedia, Wikidata and IANA.
-The IANA route verifies a real download. The Wikipedia routes let you create
-the expected event by choosing a section of the article.
+Use `demio init` in a fresh directory to generate the reference rehearsals.
+Install Python 3.10 or later and Google Chrome in `/Applications`. Each rehearsal uses its own profile,
+fixed viewport, English locale and light appearance. Watch the mouse, typed
+search, real link clicks and wheel scrolling on Wikipedia, Wikidata and IANA.
+Try **Wikipedia and Wikidata** for a complete automatic walkthrough or
+**Wikipedia manual recovery** for the Work click and **Confirm** gate.
+**IANA download, timer and confirmation** verifies a published archive.
 
 ```sh
 demio init ~/.toolbelt/demio/demos/my-demo
 cd ~/.toolbelt/demio/demos/my-demo
 python3 -m venv .venv
 .venv/bin/python -m pip install playwright==1.63.0
-PLAYWRIGHT_SKIP_BROWSER_GC=1 .venv/bin/python -m playwright install chromium
 demio register demo.json
 demio list
 demio
@@ -198,6 +202,8 @@ and the Mac file walkthrough. The latter uses the desktop by default and asks
 the presenter to confirm that both lines are visible in TextEdit. To choose
 a different destination, set `parameters.directory` in
 `scenarios/mac-file/scenario.json` to an existing writable folder.
+Existing generated demos keep their own files. To use the current examples on
+another Mac, scaffold and register a fresh folder after installing this bundle.
 
 An agent can use the [adapter contract](docs/contracts/adapter.md) to prepare a
 workflow for any project. Preparation is project-specific: Demio does not infer

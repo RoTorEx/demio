@@ -2,8 +2,16 @@
 
 ## [Unreleased]
 
-- Restore the original selector palette and date column. Use dark text on the
-  blue selection in Calm.
+- Restore the original selector palette with dark text on the Calm selection.
+  Show ID, short date and ellipsized name. Scroll each pane independently and
+  show scenario metadata before description and cues.
+- Give Back, Start/Confirm, Forward and Stop distinct controls and symbols.
+  Put Info before Read aloud and show shortcuts in a separate popover.
+- Rebuild the public browser rehearsals around visible input in an isolated
+  Chrome window, including search, real link clicks, smooth scrolling and close.
+- Show recorded development token usage and its accounting basis in Metadata.
+- Render the selector only when its content changes. Reduce registry reads
+  and bound adapter response memory without changing completion and Stop behavior.
 
 ## [0.2.1] - 2026-11-26
 

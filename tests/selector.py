@@ -42,9 +42,9 @@ for line in sys.stdin:
         script.write_text('#!'+sys.executable+'\nimport json,os,sys\nwith open(os.environ["DEMIO_LAUNCH_LOG"],"a") as log: log.write(json.dumps([sys.argv[0],*sys.argv[1:]])+"\\n")\nif os.environ.get("DEMIO_LAUNCH_FAIL"): sys.stderr.write("Launcher unavailable"); sys.exit(1)\n')
         script.chmod(0o755)
     env.update(PATH=str(launchers)+os.pathsep+os.environ['PATH'], DEMIO_LAUNCH_LOG=str(root/'launches.jsonl'))
-    def start():
+    def start(rows=30, columns=140):
         master, slave = pty.openpty()
-        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 30, 140, 0, 0))
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', rows, columns, 0, 0))
         process = subprocess.Popen([str(binary)], stdin=slave, stdout=slave, stderr=slave, env=env)
         os.close(slave)
         return process, master
@@ -56,7 +56,7 @@ for line in sys.stdin:
                 received += os.read(master, 65536)
                 plain = re.sub(rb'\x1b\[[0-9;?]*[ -/]*[@-~]', b'', received)
                 if re.sub(rb'\s+', b'', expected.encode()) in re.sub(rb'\s+', b'', plain):
-                    return
+                    return received
         raise AssertionError((expected, received[-3000:]))
     def wait_exit(process, master):
         deadline = time.monotonic()+5
@@ -141,4 +141,39 @@ for line in sys.stdin:
         assert (root/'actions.log').read_text() == before
     finally:
         finish(process, master)
-print('Selector: source opening, exact launcher arguments, launch failure, empty state, resize, navigation, detail scrolling, selected launch, unavailable guard and cleanup passed.')
+
+    env['DEMIO_CONFIG'] = str(root/'wheel.toml')
+    for number in range(18):
+        identity = f'wheel-{number:02}'
+        manifest = root/f'{identity}.json'
+        manifest.write_text(json.dumps({
+            'schema_version': 1, 'id': identity, 'name': chr(65 + number) * 6,
+            'type': 'browser', 'project': 'Scrolling check',
+            'created_at': '2026-01-01T10:00:00Z',
+            'description': '\n'.join(
+                'ZZZZZZZZ' if i == 7 else f'Right pane line {i:02}' for i in range(20)
+            ),
+            'adapter': [sys.executable, '-u', str(adapter)],
+            'steps': [{'id': 'only-step', 'title': 'Check the wheel', 'role': 'Presenter', 'say': 'Read this'}],
+        }))
+        subprocess.run([str(binary), 'register', str(manifest)], env=env, check=True, capture_output=True)
+    process, master = start(rows=15, columns=90)
+    try:
+        first_screen = wait_text(master, 'f Finder')
+        assert b'\x1b[?1006h' in first_screen, 'Terminal mouse reporting must be enabled'
+        os.write(master, b'\x1b[<65;70;7M' * 15)
+        right_moved = wait_text(master, 'ZZZZZZZZ')
+        assert all(int(column) > 45 for column in re.findall(rb'\x1b\[\d+;(\d+)H', right_moved))
+        os.write(master, b'\x1b[<65;10;7M' * 6)
+        left_moved = wait_text(master, 'MMMMMM')
+        assert all(int(column) <= 45 for column in re.findall(rb'\x1b\[\d+;(\d+)H', left_moved))
+        os.write(master, b'f')
+        wait_text(master, 'in Finder')
+        assert json.loads((root/'launches.jsonl').read_text().splitlines()[-1])[-1] == str(root/'wheel-00.json')
+        os.write(master, b'j')
+        wait_text(master, 'Metadata')
+        os.write(master, b'q')
+        assert wait_exit(process, master) == 0
+    finally:
+        finish(process, master)
+print('Selector: source opening, exact launcher arguments, launch failure, empty state, resize, navigation, independent wheel scrolling, selected launch, unavailable guard and cleanup passed.')
