@@ -18,6 +18,10 @@
   help, and clear separation from notes. Check the Chrome route before Forward.
 - Check the native foreground application and refresh the presenter on session
   updates. Wait for the browser's navigation event in the Wikipedia rehearsal.
+- Give the presenter a taller window, a scenario ID and separate step and
+  status lines, with aligned Info and Transcript sections and 12-point text.
+- Highlight detours and let Check route replay Wikipedia search after the
+  presenter returns to the expected page.
 
 ## [0.2.1] - 2026-11-26
 

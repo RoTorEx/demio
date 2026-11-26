@@ -70,6 +70,7 @@ Operations:
 | check | Read-only dependency/environment check for doctor |
 | prepare | Prepare a fresh environment once before interaction |
 | verify | Optional read-only check of the expected view for the upcoming step |
+| restore | Optional repair of the view needed by the upcoming step after Check route |
 | run | Execute the named uncompleted step and verify its visible result |
 | preview | Focus/show the named completed step without business writes |
 | rehearse | Dry run only: open or focus windows, without step once and then per step; never write or change state |
@@ -109,6 +110,12 @@ dispatch. A rejected check keeps the same step pending. After restoring the
 view the presenter explicitly chooses Check route. A run reply can include
 `"ok": false, "route_changed": true` for a detour before a business mutation.
 Demio treats that result as a route check rather than manual step completion.
+Adapters that also return `"restore_route": true` on prepare receive `restore`
+for the upcoming step when the presenter chooses Check route. The adapter
+may rebuild disposable state inside its owned view and must verify the result.
+Keep the pending step unexecuted and any business effects out of restoration.
+The request uses the pending step's timeout. An adapter that only supports
+`verify` receives another read-only check.
 Adapters receive `DEMIO_TERMINAL_CONTROLS=1` in terminal-only and automatic
 runs, where the terminal may hold keyboard focus.
 
@@ -130,7 +137,7 @@ displays the CLI's available actions and returns a command with the visible
 frame's generation. The CLI discards commands from old frames. Stop works
 in every phase. The presenter combines controls, status and notes in one
 window that retains its position and size for the session. F7/F9 handle Back and
-Forward. Hover over the information button to see shortcuts and the wait legend.
+Forward. Hover over the information button to see shortcuts.
 The panel observes changes to the session directory for new frames and closes
 when the owning CLI exits.
 The native helper also records the current foreground application PID in the

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use toml_edit::{DocumentMut, Item, Table, value};
 
-const DEFAULT_FONT_SIZE: f64 = 11.0;
+const DEFAULT_FONT_SIZE: f64 = 12.0;
 const MIN_FONT_SIZE: f64 = 9.0;
 const MAX_FONT_SIZE: f64 = 48.0;
 

@@ -131,17 +131,18 @@ introduction. **Start scenario** opens the adapter and prepares its windows and
 data. Once preparation succeeds the presenter shows the distinct first step.
 **Forward** starts that step. **Back**, **Start** and **Forward** stay on the
 first row. The fixed-size state button stays beside **Stop** on the second row.
-**Info** precedes **Read aloud**,
-and both sections wrap and scroll as the window resizes.
-The panel opens with a 360 × 240 pt content area and 11 pt notes by default.
-Open the gear on the right of the title to change the size or alignment of
-**Read aloud**. Hover over **ⓘ** to see keyboard shortcuts and the wait legend.
-**Info** uses a fixed font for step titles, progress and wait instructions.
+The scenario name and ID appear above the step and its position, such as
+**Introduction (0 of 6)**. The current status has its own line.
+**Info** and **Transcript** wrap and scroll as the window resizes.
+The panel opens with a 360 × 288 pt content area and 12 pt body text by
+default. Use the gear to change the transcript size or alignment. Hover over
+**ⓘ** for keyboard shortcuts. Split transcript topics with a blank line and
+put short cues for the presenter in angle brackets, such as `<Pause here>`.
 The shared config.toml stores presenter preferences under `[overlay]`.
 
 ```toml
 [overlay]
-font_size = 11.0
+font_size = 12.0
 alignment = "left" # left, center, right
 ```
 
@@ -164,10 +165,12 @@ session for inspection and stopping. The panel displays the adapter's progress
 and error detail.
 
 The bundled Chrome rehearsals verify the expected view before each action.
-If another app, tab or page interrupts the route, restore the expected Chrome
-view and click **Check route**. The terminal shortcut is r. A successful check
-re-enables **Forward** for the pending step. With terminal-only controls, the
-terminal may retain keyboard focus while the expected Chrome tab is visible.
+**Off route** and **Info** turn red on a detour. Follow the short instruction
+in **Info**, then select **Check route**. Back in Wikipedia search, the
+check repeats the search if its result is missing. A successful check brings
+back the transcript and enables **Forward** for the pending step.
+The terminal shortcut is r. With terminal-only controls, the terminal may
+retain keyboard focus while the expected Chrome tab is visible.
 
 ### Dry run
 

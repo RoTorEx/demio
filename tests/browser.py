@@ -133,6 +133,22 @@ BrowserType.launch_persistent_context = inspect
                         page.locator('#searchInput').click()
                         os.write(master, b'r')
                         _, first = expect('Ready', 1, after=still_drifted['generation'])
+                        # Return on a fresh search document after leaving in the same tab.
+                        page.goto('https://en.wikipedia.org/wiki/Wikipedia', wait_until='domcontentloaded')
+                        _, wrong_page = expect('Route changed', 1, after=first['generation'])
+                        assert wrong_page['detail'] == 'Return to Wikipedia search in the rehearsal tab.'
+                        os.write(master, b'r')
+                        _, still_wrong = expect('Route changed', 1, after=wrong_page['generation'])
+                        page.goto('https://www.wikipedia.org/', wait_until='domcontentloaded')
+                        field = page.locator('#searchInput')
+                        assert field.input_value() == ''
+                        os.write(master, b'r')
+                        _, restoring = expect('Restoring route', 1, after=still_wrong['generation'])
+                        assert restoring['primary'] is None and not restoring['can_previous']
+                        os.write(master, next_key)
+                        _, first = expect('Ready', 1, after=restoring['generation'])
+                        assert first['primary'] == 'next' and page.url == 'https://www.wikipedia.org/'
+                        assert field.input_value() == query
             expected_step = preceding_steps + 1
             os.write(master, next_key)
             if variant == 'event':

@@ -14,9 +14,9 @@ func send(_ command: String) { print(command); fflush(stdout) }
 struct PresenterFrame: Decodable {
     let status: String
     let channel: String
+    let scenarioID: String
     let step: String
     let title: String
-    let role: String
     let say: String
     let wait: String
     let detail: String
@@ -25,8 +25,20 @@ struct PresenterFrame: Decodable {
     let canPrevious: Bool
 
     enum CodingKeys: String, CodingKey {
-        case status, channel, step, title, role, say, wait, detail, generation, primary
+        case status, channel, step, title, say, wait, detail, generation, primary
+        case scenarioID = "scenario_id"
         case canPrevious = "can_previous"
+    }
+
+    var heading: String { "\(channel) (\(scenarioID))" }
+    var stepHeading: String { "\(title) (\(step.replacingOccurrences(of: "/", with: " of ")))" }
+    var offRoute: Bool { status == "Route changed" || status == "Restoring route" }
+    var statusLabel: String {
+        switch status {
+        case "Introduction": "Ready to start"
+        case "Route changed": "Off route"
+        default: status
+        }
     }
 }
 
@@ -48,10 +60,11 @@ final class HoverButton: NSButton {
 }
 
 final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPopoverDelegate {
-    private static let defaultFontSize: CGFloat = 11
+    private static let defaultFontSize: CGFloat = 12
+    private static let transcriptNotes = try? NSRegularExpression(pattern: #"<[^<>\r\n]+>"#)
     private let minimumFontSize: CGFloat = 9
     private let maximumFontSize: CGFloat = 48
-    private let initialContentSize = NSSize(width: 360, height: 240)
+    private let initialContentSize = NSSize(width: 360, height: 288)
     var notes: NSPanel!
     var back: NSButton!
     var start: NSButton!
@@ -61,8 +74,9 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
     let separator = NSBox()
     var frame: PresenterFrame?
     let cue = NSTextView()
-    let title = NSTextField(labelWithString: "Demio")
-    let status = NSTextField(labelWithString: "Ready")
+    let title = NSTextField(wrappingLabelWithString: "")
+    let step = NSTextField(wrappingLabelWithString: "")
+    let status = NSTextField(labelWithString: "")
     let settingsPopover = NSPopover()
     let helpPopover = NSPopover()
     var settingsButton: NSButton!
@@ -111,32 +125,44 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         smaller?.isEnabled = fontSize > minimumFontSize
         larger?.isEnabled = fontSize < maximumFontSize
         alignmentPicker?.selectedSegment = textAlignment == .center ? 1 : textAlignment == .right ? 2 : 0
+        renderCue()
+    }
+    func renderCue() {
         guard let frame else { return }
         let content = NSMutableAttributedString(string: "")
-        let labelFont = NSFont.systemFont(ofSize: 10, weight: .semibold)
-        let infoFont = NSFont.systemFont(ofSize: 10)
+        let headingFont = NSFont.systemFont(ofSize: 12, weight: .bold)
+        let infoFont = NSFont.systemFont(ofSize: 12)
         func append(_ text: String, font: NSFont, color: NSColor = .labelColor,
-                    alignment: NSTextAlignment = .left) {
+                    alignment: NSTextAlignment = .left, before: CGFloat = 0, after: CGFloat = 0) {
             let paragraph = NSMutableParagraphStyle()
             paragraph.alignment = alignment
+            paragraph.paragraphSpacingBefore = before
+            paragraph.paragraphSpacing = after
             content.append(NSAttributedString(string: text, attributes: [
                 .font: font, .foregroundColor: color, .paragraphStyle: paragraph,
             ]))
         }
-        append("❕  Info\n", font: labelFont)
-        if !frame.title.isEmpty && frame.title != frame.status {
-            append(frame.title + "\n", font: infoFont)
-        }
+        append("Info\n", font: headingFont, color: frame.offRoute ? .systemRed : .labelColor, after: 4)
         if !frame.detail.isEmpty {
             append(frame.detail + "\n", font: infoFont)
         }
-        if !frame.wait.isEmpty {
+        if !frame.offRoute && !frame.wait.isEmpty {
             append("Wait: \(frame.wait)\n", font: infoFont, color: .systemRed)
         }
-        if !frame.say.isEmpty {
-            append("\n", font: infoFont)
-            append("👤  Read aloud\n", font: labelFont)
-            append(frame.say, font: .systemFont(ofSize: fontSize), alignment: textAlignment)
+        if !frame.offRoute && !frame.say.isEmpty {
+            append("Transcript\n", font: headingFont, before: 12, after: 4)
+            let narrationFont = NSFont.systemFont(ofSize: fontSize)
+            let start = content.length
+            append(frame.say, font: narrationFont, alignment: textAlignment)
+            let length = (frame.say as NSString).length
+            let notes = Self.transcriptNotes?.matches(in: frame.say, range: NSRange(location: 0, length: length)) ?? []
+            if !notes.isEmpty {
+                let noteFont = NSFontManager.shared.convert(narrationFont, toHaveTrait: .italicFontMask)
+                for note in notes {
+                    content.addAttributes([.font: noteFont, .foregroundColor: NSColor.secondaryLabelColor],
+                        range: NSRange(location: start + note.range.location, length: note.range.length))
+                }
+            }
         }
         if !cue.attributedString().isEqual(to: content) {
             cue.textStorage?.setAttributedString(content)
@@ -197,16 +223,11 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         F7   Back to a completed step
         F9   Forward when available
         Use Fn with F7/F9 if needed.
-
-        ❕ Info   Step, status and wait cues
-        👤 Read aloud   Presenter narration
-        Confirm   Accept a verified result
-        Check route   Verify the restored rehearsal view
         """)
         legend.font = .systemFont(ofSize: 11)
         legend.translatesAutoresizingMaskIntoConstraints = false
         let controller = NSViewController()
-        let size = NSSize(width: 290, height: 142)
+        let size = NSSize(width: 220, height: 65)
         controller.view = NSView(frame: NSRect(origin: .zero, size: size))
         controller.view.addSubview(legend)
         NSLayoutConstraint.activate([
@@ -259,14 +280,14 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         }
         return control
     }
-    func panel(_ rect: NSRect, title: String, resizable: Bool) -> NSPanel {
+    func panel(_ rect: NSRect, resizable: Bool) -> NSPanel {
         var style: NSWindow.StyleMask = [.titled, .nonactivatingPanel]
         if resizable { style.insert(.resizable) }
         let window = NSPanel(contentRect: rect, styleMask: style, backing: .buffered, defer: false)
         // Preserve the original presenter panel's exclusion from legacy capture.
         // ScreenCaptureKit recorders may ignore this flag on newer macOS versions.
         window.sharingType = .none
-        window.title = title
+        window.titleVisibility = .hidden
         window.level = .floating
         window.isFloatingPanel = true
         window.hidesOnDeactivate = false
@@ -314,8 +335,8 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         publishForeground()
         let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
         let origin = NSPoint(x: screen.maxX - initialContentSize.width - 25, y: screen.minY + 25)
-        notes = panel(NSRect(origin: origin, size: initialContentSize), title: "Demio", resizable: true)
-        notes.contentMinSize = NSSize(width: 320, height: 200)
+        notes = panel(NSRect(origin: origin, size: initialContentSize), resizable: true)
+        notes.contentMinSize = NSSize(width: 320, height: 232)
         let row = NSStackView()
         row.orientation = .horizontal
         row.distribution = .fillEqually
@@ -327,6 +348,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         next = button("Forward", symbol: "arrow.right", action: #selector(forward))
         next.imagePosition = .imageTrailing
         stateButton = button("Confirm", symbol: "checkmark", action: #selector(performStateAction))
+        stateButton.setAccessibilityLabel("Confirm completion")
         stop = button("Stop", symbol: "stop.fill", action: #selector(stopScenario))
         [back!, start!, next!].forEach(row.addArrangedSubview)
         let stateRow = NSStackView(views: [stateButton, stop])
@@ -337,15 +359,22 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         body.alignment = .centerX
         body.spacing = 6
         body.translatesAutoresizingMaskIntoConstraints = false
-        title.font = .systemFont(ofSize: 13, weight: .semibold)
-        title.lineBreakMode = .byTruncatingTail
+        title.font = .systemFont(ofSize: 15, weight: .bold)
+        title.maximumNumberOfLines = 2
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         title.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        status.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+        step.font = .systemFont(ofSize: 12, weight: .medium)
+        step.maximumNumberOfLines = 2
+        step.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        status.font = .systemFont(ofSize: 12, weight: .semibold)
         status.lineBreakMode = .byTruncatingTail
         status.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let metadata = NSStackView(views: [step, status])
+        metadata.orientation = .vertical
+        metadata.alignment = .leading
+        metadata.spacing = 3
         settingsButton = button("Settings", symbol: "gearshape", action: #selector(toggleSettings), iconOnly: true)
-        _ = button("Shortcuts and legend", symbol: "info.circle", action: nil, iconOnly: true, control: helpButton)
+        _ = button("Keyboard shortcuts", symbol: "info.circle", action: nil, iconOnly: true, control: helpButton)
         helpButton.toolTip = nil
         helpButton.onHover = { [weak self] entered in self?.hoverHelp(entered) }
         let header = NSStackView(views: [title, settingsButton, helpButton])
@@ -361,7 +390,8 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         cue.isSelectable = true
         cue.drawsBackground = false
         cue.textColor = .labelColor
-        cue.textContainerInset = NSSize(width: 4, height: 4)
+        cue.textContainerInset = NSSize(width: 0, height: 4)
+        cue.textContainer?.lineFragmentPadding = 0
         cue.isVerticallyResizable = true
         cue.isHorizontallyResizable = false
         cue.autoresizingMask = [.width]
@@ -369,7 +399,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         cue.textContainer?.containerSize = NSSize(width: initialContentSize.width - 30, height: CGFloat.greatestFiniteMagnitude)
         scroll.documentView = cue
         separator.boxType = .separator
-        for view in [header, status, scroll, separator, row, stateRow] as [NSView] { body.addArrangedSubview(view) }
+        for view in [header, metadata, scroll, separator, row, stateRow] as [NSView] { body.addArrangedSubview(view) }
         notes.contentView!.addSubview(body)
         NSLayoutConstraint.activate([
             body.leadingAnchor.constraint(equalTo: notes.contentView!.leadingAnchor, constant: 12),
@@ -377,12 +407,14 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
             body.topAnchor.constraint(equalTo: notes.contentView!.topAnchor, constant: 10),
             body.bottomAnchor.constraint(equalTo: notes.contentView!.bottomAnchor, constant: -10),
             header.widthAnchor.constraint(equalTo: body.widthAnchor),
-            status.widthAnchor.constraint(equalTo: body.widthAnchor),
+            metadata.widthAnchor.constraint(equalTo: body.widthAnchor),
+            step.widthAnchor.constraint(equalTo: metadata.widthAnchor),
+            status.widthAnchor.constraint(equalTo: metadata.widthAnchor),
             scroll.widthAnchor.constraint(equalTo: body.widthAnchor),
             separator.widthAnchor.constraint(equalTo: body.widthAnchor),
             row.widthAnchor.constraint(equalTo: body.widthAnchor),
             stateRow.widthAnchor.constraint(equalToConstant: 240),
-            scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 56),
+            scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 50),
         ])
         notes.orderFrontRegardless()
         installKeys()
@@ -414,13 +446,18 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         guard NSApp.windows.filter({ $0.isVisible }).count == 1,
               buttons.allSatisfy({ $0.window === notes && $0.image != nil }), cue.window === notes,
               notes.contentView?.bounds.size == initialContentSize, narrationSize() == fontSize,
-              notes.styleMask.contains(.resizable),
-              let infoRange = cue.string.range(of: "❕  Info"),
-              let readRange = cue.string.range(of: "👤  Read aloud"),
-              infoRange.lowerBound < readRange.lowerBound, frame?.channel == title.stringValue,
+              notes.styleMask.contains(.resizable), notes.titleVisibility == .hidden,
+              let infoRange = cue.string.range(of: "Info\n"),
+              let transcriptRange = cue.string.range(of: "Transcript\n"),
+              infoRange.lowerBound < transcriptRange.lowerBound,
               let initialFrame = frame,
+              title.stringValue == "Native check (native1)",
+              step.stringValue == initialFrame.stepHeading, status.stringValue == initialFrame.statusLabel,
+              attributes(at: "Info")?[.font] as? NSFont == .systemFont(ofSize: 12, weight: .bold),
+              let transcriptStyle = attributes(at: "Transcript")?[.paragraphStyle] as? NSParagraphStyle,
+              transcriptStyle.paragraphSpacingBefore >= 10,
               attributes(at: initialFrame.say)?[.font] as? NSFont == .systemFont(ofSize: fontSize),
-              attributes(at: initialFrame.detail)?[.font] as? NSFont == .systemFont(ofSize: 10) else { exit(3) }
+              attributes(at: initialFrame.detail)?[.font] as? NSFont == .systemFont(ofSize: 12) else { exit(3) }
         let original = notes.frame
         notes.setFrame(NSRect(x: original.minX+30, y: original.minY+20, width: 600, height: 360), display: true)
         notes.contentView?.layoutSubtreeIfNeeded()
@@ -443,13 +480,22 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         let rule = separator.convert(separator.bounds, to: content)
         let gearRect = settingsButton.convert(settingsButton.bounds, to: content)
         let helpRect = helpButton.convert(helpButton.bounds, to: content)
+        func textLeft(_ field: NSTextField) -> CGFloat {
+            field.convert(NSPoint(x: field.alignmentRectInsets.left, y: 0), to: content).x
+        }
+        let headingX = textLeft(title)
+        let cueX = cue.convert(cue.textContainerOrigin, to: content).x
+        let stepX = textLeft(step)
+        let statusX = textLeft(status)
         guard backRect.maxX < center.minX, center.maxX < nextRect.minX,
               abs(center.midX - content.bounds.midX) < 2,
               stopRect.maxY < center.minY, stateRect.maxX < stopRect.minX,
               abs(stopRect.midY - stateRect.midY) < 2, rule.minY > center.maxY,
               gearRect.maxX < helpRect.minX,
-              content.bounds.maxX - helpRect.maxX < 16 else {
+              content.bounds.maxX - helpRect.maxX < 16,
+              abs(headingX - cueX) < 1, abs(headingX - stepX) < 1, abs(headingX - statusX) < 1 else {
             fputs("Presenter positions: \([backRect, center, nextRect, stopRect, gearRect, helpRect]) in \(content.bounds).\n", stderr)
+            fputs("Text left edges: \([headingX, stepX, statusX, cueX]), separator: \(rule).\n", stderr)
             exit(12)
         }
         notes.setContentSize(initialContentSize)
@@ -478,7 +524,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         let originalFont = fontSize
         larger.performClick(nil)
         guard fontSize == min(maximumFontSize, originalFont+2), narrationSize() == fontSize,
-              attributes(at: initialFrame.detail)?[.font] as? NSFont == .systemFont(ofSize: 10) else { exit(5) }
+              attributes(at: initialFrame.detail)?[.font] as? NSFont == .systemFont(ofSize: 12) else { exit(5) }
         smaller.performClick(nil)
         guard fontSize == originalFont else { exit(6) }
         fontSize = minimumFontSize; applyTextStyle(); smaller.performClick(nil)
@@ -491,7 +537,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
             alignmentPicker.sendAction(alignmentPicker.action!, to: self)
             guard let say = frame?.say,
                   let cueStyle = attributes(at: say)?[.paragraphStyle] as? NSParagraphStyle,
-                  let infoStyle = attributes(at: "❕  Info")?[.paragraphStyle] as? NSParagraphStyle,
+                  let infoStyle = attributes(at: "Info")?[.paragraphStyle] as? NSParagraphStyle,
                   cueStyle.alignment == expected, infoStyle.alignment == .left else { exit(7) }
         }
         fontSize = 30; applyTextStyle(); saveSettings()
@@ -512,7 +558,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
               let helpWindow = helpContent.window, helpWindow.sharingType == .none,
               let legend = helpContent.subviews.first as? NSTextField,
               legend.stringValue.contains("F7"), legend.stringValue.contains("F9"),
-              legend.stringValue.contains("Check route") else { exit(17) }
+              legend.stringValue.split(separator: "\n").count == 3 else { exit(17) }
         helpButton.mouseExited(with: leave)
         guard !helpPopover.isShown, notes.sharingType == .none else { exit(17) }
         let retainedFrame = notes.frame
@@ -521,23 +567,28 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
             ("Introduction", "start", false), ("Preparing", nil, false), ("Waiting", nil, false),
             ("Awaiting confirmation", "confirm", false), ("Step failed", "confirm", false),
             ("Outcome unknown", nil, false), ("Checking route", nil, false),
-            ("Route changed", "restore", false), ("Ready", "next", true), ("Finished", nil, true),
+            ("Route changed", "restore", false), ("Restoring route", nil, false),
+            ("Ready", "next", true), ("Finished", nil, true),
         ]
         for (index, (status, command, canGoBack)) in states.enumerated() {
-            var state: [String: Any] = ["status": status, "channel": "Native check", "step": "3/5",
-                "role": "Approver", "title": "Updated step", "say": "Updated narration stays with the controls.",
+            var state: [String: Any] = ["status": status, "channel": "Native check", "scenario_id": "native1", "step": "3/5",
+                "title": "Updated step", "say": "Updated narration stays with the controls.",
                 "detail": "Current step detail", "wait": "", "generation": index + 1, "can_previous": canGoBack]
             if let command { state["primary"] = command }
             guard let data = try? JSONSerialization.data(withJSONObject: state) else { exit(13) }
             do { try data.write(to: session.appendingPathComponent("panel.json")) } catch { exit(13) }
             refresh()
             content.layoutSubtreeIfNeeded()
+            let offRoute = status == "Route changed" || status == "Restoring route"
+            let statusColor: NSColor = offRoute ? .systemRed : .labelColor
             guard back.isEnabled == canGoBack, start.isEnabled == (command == "start"), start.title == "Start",
                   stateButton.isEnabled == (command == "confirm" || command == "restore"),
                   stateButton.frame.size == stateSize, buttons.allSatisfy({ !$0.isHidden }),
                   next.isEnabled == (command == "next"), stop.isEnabled,
-                  cue.string.contains("Updated narration"), cue.string.contains("Current step detail"),
-                  narrationSize() == fontSize, self.status.stringValue.hasPrefix(status),
+                  cue.string.contains("Updated narration") == !offRoute, cue.string.contains("Current step detail"),
+                  self.status.stringValue == frame?.statusLabel, self.status.textColor == statusColor,
+                  attributes(at: "Info")?[.foregroundColor] as? NSColor == statusColor,
+                  offRoute || narrationSize() == fontSize,
                   notes.frame == retainedFrame else { exit(13) }
             if command == "start" {
                 forward()
@@ -545,20 +596,25 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
             }
             if status == "Awaiting confirmation" || command == "restore" {
                 forward()
+                if command == "restore" { snapshot(content, as: "off-route") }
                 stateButton.performClick(nil)
             }
         }
         guard buttons.allSatisfy({ $0.refusesFirstResponder }) else { exit(14) }
-        let tipState: [String: Any] = ["status": "Ready", "channel": "Native check", "step": "4/5",
-            "role": "Presenter", "title": "Tip", "say": "Narration.", "wait": "Copilot's reply",
+        let tipState: [String: Any] = ["status": "Ready", "channel": "Native check", "scenario_id": "native1", "step": "4/5",
+            "title": "Tip", "say": "Narration.\n\n<Presenter note>\nAnother paragraph.", "wait": "Copilot's reply",
             "detail": "", "generation": states.count + 1, "primary": "next", "can_previous": true]
         guard let tipData = try? JSONSerialization.data(withJSONObject: tipState) else { exit(15) }
         do { try tipData.write(to: session.appendingPathComponent("panel.json"), options: .atomic) } catch { exit(15) }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             guard self.cue.string.contains("Wait: Copilot's reply"),
                   attributes(at: "Wait: Copilot's reply")?[.foregroundColor] as? NSColor == NSColor.systemRed,
-                  attributes(at: "Wait: Copilot's reply")?[.font] as? NSFont == .systemFont(ofSize: 10),
-                  attributes(at: "Narration.")?[.font] as? NSFont == .systemFont(ofSize: self.fontSize) else { exit(15) }
+                  attributes(at: "Wait: Copilot's reply")?[.font] as? NSFont == .systemFont(ofSize: 12),
+                  attributes(at: "Narration.")?[.font] as? NSFont == .systemFont(ofSize: self.fontSize),
+                  let noteFont = attributes(at: "<Presenter note>")?[.font] as? NSFont,
+                  NSFontManager.shared.traits(of: noteFont).contains(.italicFontMask),
+                  attributes(at: "<Presenter note>")?[.foregroundColor] as? NSColor == .secondaryLabelColor,
+                  self.cue.string.contains("Narration.\n\n<Presenter note>\nAnother paragraph.") else { exit(15) }
             self.back.performClick(nil); self.next.performClick(nil); self.stop.performClick(nil)
             fputs("Native UI: session updates, button gating, notes, popovers, capture exclusion and preferences passed.\n", stderr)
             NSApp.terminate(nil)
@@ -583,14 +639,27 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         if getppid() != owner { NSApp.terminate(nil); return }
         guard let data = try? Data(contentsOf: session.appendingPathComponent("panel.json")), data != last,
               let state = try? JSONDecoder().decode(PresenterFrame.self, from: data) else { return }
-        let newCue = frame?.step != state.step || frame?.say != state.say || frame?.title != state.title
+        let previous = frame
+        let newStep = previous?.step != state.step || previous?.title != state.title
+        let newCue = newStep || previous?.say != state.say || previous?.offRoute != state.offRoute
         last = data
         frame = state
-        title.stringValue = state.channel
-        title.toolTip = state.channel
-        status.stringValue = "\(state.status) · \(state.step) · \(state.role)"
-        status.toolTip = status.stringValue
-        applyTextStyle()
+        if previous?.channel != state.channel || previous?.scenarioID != state.scenarioID {
+            title.stringValue = state.heading
+            title.toolTip = state.heading
+            notes.title = state.heading
+        }
+        if newStep {
+            step.stringValue = state.stepHeading
+            step.toolTip = state.stepHeading
+        }
+        if previous?.status != state.status {
+            status.stringValue = state.statusLabel
+            status.textColor = state.offRoute ? .systemRed : .labelColor
+        }
+        if newCue || previous?.detail != state.detail || previous?.wait != state.wait {
+            renderCue()
+        }
         if newCue {
             cue.scrollRangeToVisible(NSRange(location: 0, length: 0))
         }
@@ -601,15 +670,18 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         let (caption, symbol): (String, String) = switch (state.primary, state.status) {
         case ("restore", _): ("Check route", "arrow.clockwise")
         case (_, "Checking route"): ("Checking", "magnifyingglass")
+        case (_, "Restoring route"): ("Restoring", "arrow.clockwise")
         case (_, "Waiting"): ("Waiting", "hourglass")
         case (_, "Working"), (_, "Preparing"): ("Working", "hourglass")
         case (_, "Outcome unknown"), (_, "Preparation failed"), (_, "Preview failed"), (_, "Session expired"):
             ("Blocked", "lock")
         default: ("Confirm", "checkmark")
         }
-        stateButton.title = caption
-        stateButton.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
-        stateButton.setAccessibilityLabel(caption == "Confirm" ? "Confirm completion" : caption)
+        if stateButton.title != caption {
+            stateButton.title = caption
+            stateButton.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+            stateButton.setAccessibilityLabel(caption == "Confirm" ? "Confirm completion" : caption)
+        }
     }
     func installKeys() {
         let callback: EventHandlerUPP = { _, event, pointer in

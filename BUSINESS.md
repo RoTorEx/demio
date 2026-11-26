@@ -135,22 +135,24 @@ and the controls. Start scenario invokes the adapter and prepares the
 environment. Successful preparation shows the first executable step with its
 own narration. Next runs that step. A step contains its ID, title, role,
 narration text, operation timeout, and optional confirmation requirement.
-The presenter reads the text marked **Read aloud** below **Info**. Both sections
-use regular-weight body text and distinct labels. The movable, resizable
-presenter separates notes from navigation with a horizontal rule. Back, Start
+The panel header shows the scenario name and ID, the step and position, and
+the current status on its own line. **Info** and **Transcript** share the
+header's left edge. Both use bold section headings and regular-weight body
+text. Transcript paragraphs separate topics. Muted italic text in angle
+brackets is a private cue for the presenter. The movable, resizable presenter
+separates notes from navigation with a horizontal rule. Back, Start
 and Forward stay on the first row, with a fixed-size state control next to Stop
 on the second row. All controls stay visible. The gear sits at the right of
 the scenario title beside the circled information button. The gear opens
-settings by click and the information button opens the F7/F9 shortcuts and
-wait legend on hover.
+settings by click and the information button opens the F7/F9 shortcuts on hover.
 The panel initially sits at the lower-right so the left-side contents in the
 browser rehearsals stay reachable. A−/A+ changes the spoken text size by two
 points per click within 9–48 points. Left, center, and
-right alignment apply to narration. Step titles, progress, and wait instructions
-remain left-aligned in the fixed-size **Info** section.
-The 11-point default is half the 0.1.10 default. The initial 360 × 240 point
-content area keeps the panel compact during a demo. Presenters can resize the
-panel or adjust the font, and longer notes wrap and scroll. Font size
+right alignment apply to the transcript. The header, progress and wait
+instructions are left-aligned. The initial 360 × 288 point content area gives
+more room to the 12-point text and the gap between Info and Transcript.
+Presenters can resize the panel or adjust the transcript font, and longer text
+wraps and scrolls. Font size
 and alignment persist in the shared config.toml [overlay] table (font_size and
 alignment). The CLI owns TOML parsing,
 atomic writes and legacy JSON migration; the native window calls its sibling CLI
@@ -182,8 +184,11 @@ redrawing or writing a new panel frame on unchanged results. The public Chrome
 adapter checks the expected tab, page and search prerequisites. The native
 presenter publishes macOS foreground changes so the adapter can distinguish its
 Chrome instance when another application has focus. A detected
-detour disables Forward until the presenter restores the view and chooses
-Check route. Checking a restored view leaves the pending step unexecuted.
+detour highlights the status and Info in red and hides the transcript.
+Check route can repair the view when the adapter supports restoring disposable
+state. When the presenter returns to Wikipedia search, the browser adapter can
+repeat the search and verify its suggestion. A successful check makes Forward
+available for the separate pending step.
 
 A dry run lets the presenter learn the narration before a real run. After Start,
 Demio asks the adapter to `rehearse` once (30 seconds, long enough for a browser to open) and

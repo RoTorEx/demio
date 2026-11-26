@@ -16,6 +16,15 @@ WIKIDATA = "https://www.wikidata.org/wiki/Q7259"
 TIME_ZONES = "https://www.iana.org/time-zones"
 RELEASES = "https://www.iana.org/time-zones/releases"
 CHROME = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+VIEW_NAMES = {
+    WIKIPEDIA: "Wikipedia search",
+    ARTICLE: "the Ada Lovelace article",
+    ARTICLE + "#Biography": "Biography in Wikipedia",
+    ARTICLE + "#Work": "Work in Wikipedia",
+    WIKIDATA: "the Ada Lovelace entry in Wikidata",
+    TIME_ZONES: "IANA Time Zones",
+    RELEASES: "IANA Release History",
+}
 
 class RouteChanged(RuntimeError):
     pass
@@ -75,13 +84,13 @@ class BrowserInput:
         start_x, start_y = self.position or (size["width"] * .26, size["height"] * .65)
         origin = None
         if self.warp:
-            left, top, frame_width, toolbar, focused = page.evaluate(
+            left, top, frame_width, toolbar, visible = page.evaluate(
                 """() => [screenX, screenY, outerWidth - innerWidth,
-                          outerHeight - innerHeight, document.hasFocus()]"""
+                          outerHeight - innerHeight, !document.hidden]"""
             )
-            if not focused and self.focus_required:
-                raise RouteChanged("Click inside the rehearsal page in Chrome.")
-            if focused and 0 <= frame_width <= 12 and 0 < toolbar < 250:
+            if not visible and self.focus_required:
+                raise RouteChanged("Return to the rehearsal tab in Chrome.")
+            if visible and 0 <= frame_width <= 12 and 0 < toolbar < 250:
                 origin = (left + frame_width / 2, top + toolbar - 1)
         for step in range(19):
             if step in (6, 12, 18):
@@ -195,7 +204,7 @@ class Walkthrough:
             self.page.locator("#searchInput").wait_for(state="visible")
         self.page.bring_to_front()
 
-    def verify_route(self, step):
+    def inspect_route(self, step):
         self.input.verify_focus()
         url = {
             "search": WIKIPEDIA, "open-article": WIKIPEDIA,
@@ -237,28 +246,59 @@ class Walkthrough:
                 [step in ("search", "open-article"), ARTICLE],
             )
         except Exception as error:
-            raise RouteChanged("The rehearsal tab is unavailable. Reopen or stop the run.") from error
-        if current != url:
-            raise RouteChanged(f"Return to {url} in the rehearsal tab.")
+            raise RouteChanged("Wait for the rehearsal tab to load, then check the route.") from error
+        # The browser round trip above delivers queued tab changes to Playwright.
+        if any(not tab or tab.is_closed() for tab in tabs):
+            raise RouteChanged("A rehearsal tab was closed. Stop and start a fresh run.")
         if self.context.pages != tabs:
-            raise RouteChanged("Restore the rehearsal tabs in their original order.")
+            raise RouteChanged("Close extra tabs in the rehearsal window.")
+        if current != url:
+            name = VIEW_NAMES.get(url, f"IANA release {self.parameters.get('release')}")
+            raise RouteChanged(f"Return to {name} in the rehearsal tab.")
         if not visible:
             raise RouteChanged("Return to the rehearsal tab in Chrome.")
+        if step in ("search", "open-article") and query is None:
+            raise RouteChanged("Reload the Wikipedia search page.")
+        return focused, query, result
+
+    def verify_route(self, step):
+        focused, query, result = self.inspect_route(step)
         if self.focus_required and not focused:
             raise RouteChanged("Click inside the rehearsal page in Chrome.")
         if step == "search" and query != "":
             raise RouteChanged("Clear the Wikipedia search field.")
-        if step == "open-article" and (query != QUERY or not result):
-            raise RouteChanged(f"Enter {QUERY} and leave its search result visible.")
+        if step == "open-article":
+            if query not in ("", QUERY):
+                raise RouteChanged("Clear the Wikipedia search field.")
+            if query != QUERY or not result:
+                raise RouteChanged("Select Check route to repeat the Wikipedia search.")
+
+    def restore_route(self, step):
+        if step != "open-article":
+            self.verify_route(step)
+            return
+        focused, query, result = self.inspect_route(step)
+        if query not in ("", QUERY):
+            raise RouteChanged("Clear the Wikipedia search field.")
+        if query == "" or not result:
+            self.search(replace=bool(query))
+        elif self.focus_required and not focused:
+            self.input.click(self.page, self.page.locator("#searchInput"))
+        else:
+            return
+        self.verify_route(step)
 
     def result_link(self):
         return self.page.locator(f'a[href="{ARTICLE}"]:visible').first
 
-    def search(self):
+    def search(self, replace=False):
         from playwright.sync_api import expect
 
         field = self.page.locator("#searchInput")
         self.input.click(self.page, field)
+        if replace:
+            field.press("Meta+A" if sys.platform == "darwin" else "Control+A")
+            field.press("Backspace")
         field.press_sequentially(QUERY, delay=75)
         expect(field).to_have_value(QUERY)
         self.result_link().wait_for(state="visible")
@@ -412,9 +452,11 @@ def main():
             elif operation == "prepare" or (operation == "rehearse" and request["step"] is None):
                 walkthrough.prepare(request["session_dir"])
                 if operation == "prepare":
-                    capabilities["verify_route"] = True
+                    capabilities = {"verify_route": True, "restore_route": True}
             elif operation == "verify":
                 walkthrough.verify_route(request["step"])
+            elif operation == "restore":
+                walkthrough.restore_route(request["step"])
             elif operation == "run":
                 walkthrough.run(request)
             elif operation == "preview":

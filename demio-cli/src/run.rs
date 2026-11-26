@@ -51,6 +51,7 @@ impl Position {
 struct Display<'a> {
     status: &'a str,
     channel: &'a str,
+    scenario_id: &'a str,
     step: String,
     title: &'a str,
     role: &'a str,
@@ -153,7 +154,7 @@ fn journal(channel: &Channel, position: &Position, status: &str) {
     );
 }
 
-fn terminal_text(channel: &Channel, display: &Display) -> String {
+fn terminal_text(name: &str, display: &Display) -> String {
     let wait = if display.wait.is_empty() {
         String::new()
     } else {
@@ -176,8 +177,8 @@ fn terminal_text(channel: &Channel, display: &Display) -> String {
     };
     format!(
         "Demio — {} [{}]\r\n\r\n{}  ·  {}  ·  {}\r\n{}\r\n\r\n{}\r\n\r\n{wait}{}\r\n\r\n{primary}{back}q / Ctrl+C  Stop\r\n",
-        channel.name,
-        channel.id,
+        name,
+        display.scenario_id,
         display.status,
         display.step,
         display.role,
@@ -324,6 +325,7 @@ enum Work {
 enum RouteIntent {
     Monitor,
     Ready,
+    Restore,
     Advance,
     Preview(usize),
 }
@@ -338,6 +340,7 @@ enum Phase {
     Ready,
     CheckingRoute,
     RouteChanged,
+    RestoringRoute,
     Working(Work),
     Confirm {
         index: usize,
@@ -359,6 +362,7 @@ struct Presenter {
     generation: u64,
     deadline: Option<Instant>,
     guarded: bool,
+    can_restore_route: bool,
     route_check: Option<RouteCheck>,
     next_route_check: Instant,
 }
@@ -380,6 +384,7 @@ impl Presenter {
             generation: 0,
             deadline: None,
             guarded: false,
+            can_restore_route: false,
             route_check: None,
             next_route_check: Instant::now(),
         }
@@ -407,6 +412,7 @@ impl Presenter {
             Phase::Introduction => "Introduction",
             Phase::CheckingRoute => "Checking route",
             Phase::RouteChanged => "Route changed",
+            Phase::RestoringRoute => "Restoring route",
             Phase::Working(Work::Prepare) => "Preparing",
             Phase::Working(_) if self.waiting => "Waiting",
             Phase::Working(_) => "Working",
@@ -421,7 +427,7 @@ impl Presenter {
 
     fn index(&self) -> Option<usize> {
         match self.phase {
-            Phase::Ready | Phase::CheckingRoute | Phase::RouteChanged => {
+            Phase::Ready | Phase::CheckingRoute | Phase::RouteChanged | Phase::RestoringRoute => {
                 self.position.view.or(Some(0))
             }
             Phase::Working(Work::Step { index, .. }) | Phase::Confirm { index, .. } => Some(index),
@@ -451,6 +457,7 @@ impl Presenter {
         Display {
             status: self.status(total),
             channel: &channel.name,
+            scenario_id: &channel.id,
             step: format!("{}/{total}", index.map_or(0, |index| index + 1)),
             title,
             role,
@@ -501,7 +508,9 @@ impl Presenter {
         index: usize,
         intent: RouteIntent,
     ) {
-        if !matches!(intent, RouteIntent::Monitor) {
+        if matches!(intent, RouteIntent::Restore) {
+            self.change(Phase::RestoringRoute, "Checking the rehearsal view…");
+        } else if !matches!(intent, RouteIntent::Monitor) {
             self.change(Phase::CheckingRoute, "Checking the rehearsal tab and page…");
         }
         if let Some(check) = &mut self.route_check {
@@ -509,21 +518,21 @@ impl Presenter {
             check.intent = intent;
             return;
         }
-        match worker.send(
-            "verify",
-            Some(&channel.steps[index].id),
-            ROUTE_CHECK_TIMEOUT,
-        ) {
+        let step = &channel.steps[index];
+        let (operation, timeout) =
+            if self.can_restore_route && matches!(intent, RouteIntent::Restore) {
+                ("restore", step.timeout_seconds)
+            } else {
+                ("verify", ROUTE_CHECK_TIMEOUT)
+            };
+        match worker.send(operation, Some(&step.id), timeout) {
             Ok(()) => self.route_check = Some(RouteCheck { index, intent }),
             Err(error) => self.blocked(Some(index), "Outcome unknown", error.to_string()),
         }
     }
 
     fn route_changed(&mut self, error: anyhow::Error) {
-        self.change(
-            Phase::RouteChanged,
-            format!("{error:#}\nChoose Check route after restoring the rehearsal view."),
-        );
+        self.change(Phase::RouteChanged, error.to_string());
     }
 
     fn finish_route_check(
@@ -537,7 +546,7 @@ impl Presenter {
         match result {
             Ok(_) => match check.intent {
                 RouteIntent::Monitor => (),
-                RouteIntent::Ready => self.ready(channel.steps.len()),
+                RouteIntent::Ready | RouteIntent::Restore => self.ready(channel.steps.len()),
                 RouteIntent::Advance => self.step(channel, Some(worker), check.index, true),
                 RouteIntent::Preview(index) => self.step(channel, Some(worker), index, false),
             },
@@ -610,6 +619,8 @@ impl Presenter {
                     .get("verify_route")
                     .and_then(serde_json::Value::as_bool)
                     == Some(true);
+                self.can_restore_route =
+                    self.guarded && reply["restore_route"].as_bool() == Some(true);
                 self.prepare_forward(channel, worker);
             }
             (Work::Prepare, Err(error)) => {
@@ -693,11 +704,11 @@ impl Presenter {
     }
 }
 
-fn print_script(channel: &Channel) {
+fn print_script(channel: &Channel, name: &str) {
     let total = channel.steps.len();
     println!(
         "Dry run: {} [{}]. Nothing is executed.\n\n0/{total}  Introduction\n{}\n",
-        channel.name,
+        name,
         channel.id,
         channel.introduction()
     );
@@ -734,7 +745,11 @@ fn auto_run(
     let mut prepared = false;
     let mut deadline = None;
     let result = (|| -> Result<()> {
-        println!("Preparing {} [{}]…", channel.name, channel.id);
+        println!(
+            "Preparing {} [{}]…",
+            channel.display_name(manifest),
+            channel.id
+        );
         worker.send("prepare", None, channel.steps[0].timeout_seconds)?;
         worker.wait(cancelled, None)?;
         prepared = true;
@@ -781,7 +796,7 @@ fn auto_run(
 }
 
 pub fn run(
-    mut channel: Channel,
+    channel: Channel,
     manifest: PathBuf,
     theme: &str,
     auto: bool,
@@ -790,16 +805,16 @@ pub fn run(
     cancelled: Arc<AtomicBool>,
 ) -> Result<()> {
     let operation = crate::usage::Operation::start("scenario_run");
-    channel.name = channel.display_name(&manifest);
     if auto {
         return auto_run(&channel, &manifest, &cancelled, operation);
     }
+    let terminal_name = channel.display_name(&manifest);
     let total = channel.steps.len();
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
         if !dry {
             bail!("Interactive run requires a terminal; use --auto for an explicit scripted run");
         }
-        print_script(&channel);
+        print_script(&channel, &terminal_name);
         operation.finish(
             "success",
             serde_json::json!({
@@ -821,7 +836,7 @@ pub fn run(
         Some(overlay(&scratch.0, input_tx)?)
     };
     let screen = Screen::enter()?;
-    paint(&terminal_text(&channel, &initial), theme)?;
+    paint(&terminal_text(&terminal_name, &initial), theme)?;
     let mut worker: Option<Worker> = None;
     let mut drawn_generation = presenter.generation;
     let mut progress_changed = false;
@@ -830,7 +845,7 @@ pub fn run(
         if progress_changed || drawn_generation != presenter.generation {
             let frame = presenter.display(&channel);
             atomic_write(&panel_path, &serde_json::to_vec(&frame)?)?;
-            paint(&terminal_text(&channel, &frame), theme)?;
+            paint(&terminal_text(&terminal_name, &frame), theme)?;
             drawn_generation = presenter.generation;
             progress_changed = false;
         }
@@ -901,7 +916,7 @@ pub fn run(
                 }
                 Some(Action::Restore) => {
                     if let (Some(index), Some(worker)) = (presenter.guarded_step(total), &worker) {
-                        presenter.verify_route(&channel, worker, index, RouteIntent::Ready);
+                        presenter.verify_route(&channel, worker, index, RouteIntent::Restore);
                     }
                 }
                 Some(Action::Confirm) => {

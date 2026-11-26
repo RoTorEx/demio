@@ -111,6 +111,11 @@ overrides resolve beside that scenario file. Commands execute in that workspace.
 | `created_at` | Original creation timestamp; preserve it when editing. `init` sets it and registration fills it when absent. |
 | `schema_version` | Keep `1`; unknown JSON fields are rejected. JSON does not support comments. |
 
+In `intro` and `steps[].say`, separate topics or subactions with a blank line
+(`\n\n` in JSON). Put short presenter-only cues inside angle brackets, such as
+`<Pause for the result>`. The native transcript styles those cues in muted
+italic type. Read the surrounding text to the audience.
+
 Development tokens describe the recorded authoring work. The total is input
 plus output. Cached input is included in input and displayed separately.
 `measured` identifies usage recorded for a single scenario. `allocated`
@@ -140,7 +145,8 @@ Removing or reordering a step can break the state needed by later steps.
 ## Adapter responsibilities
 
 The adapter is a long-lived process. Demio sends JSON-line requests for `check`,
-`prepare`, `run`, `preview`, `rehearse`, and `cleanup`. The adapter owns application actions,
+`prepare`, `run`, `preview`, `rehearse`, and `cleanup`. The adapter can opt
+into `verify` and `restore` for route recovery. It owns application actions,
 account switching, dependency checks, and visible-result verification. The
 `step` value matches `steps[].id`. Only a successful `done` response completes a
 step. Keep stdout for protocol JSON; send diagnostics to stderr.

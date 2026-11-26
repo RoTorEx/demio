@@ -30,6 +30,8 @@ For a product demo, follow AGENTS.md and retain its agreed brief here.
 Metadata and narration belong in scenario JSON; route/input differences belong
 in parameters. Clicks, account switching and visible-result checks belong in the
 shared adapter. Adding a step requires matching adapter behavior for its ID.
+Separate different transcript topics with blank lines. Use angle brackets for
+short cues the presenter keeps private, such as `<Pause for the result>`.
 Do not change existing scenario IDs or original creation timestamps during edits.
 
 ## Prepare and launch
