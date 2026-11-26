@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+import secrets
 import shlex
 import subprocess
 import sys
@@ -10,6 +11,8 @@ import time
 
 FIRST = "Demio file walkthrough\n"
 SECOND = "Checked in Terminal.\n"
+GREETING = "Hello Demio :D\n"
+COMMAND_PAUSE_SECONDS = 1
 
 
 def terminal(script, *arguments):
@@ -30,57 +33,103 @@ def identity(path):
     return info.st_dev, info.st_ino
 
 
+def native_input(*arguments):
+    helper = os.environ.get("DEMIO_NATIVE_INPUT")
+    if not helper:
+        raise RuntimeError("Run this rehearsal with the Demio native bundle.")
+    result = subprocess.run(
+        [helper, "--native-input", *arguments], capture_output=True, text=True,
+        timeout=15 + 0.15 * sum(map(len, arguments)),
+    )
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or "Could not type in the rehearsal Terminal.")
+
+
 class Walkthrough:
     def __init__(self):
         parameters = json.loads(os.environ.get("DEMIO_PARAMETERS", "{}"))
         self.directory = Path(parameters.get("directory", "~/Desktop")).expanduser().resolve()
+        desktop = (Path.home() / "Desktop").resolve()
+        self.folder_argument = "~/Desktop" if self.directory == desktop else shlex.quote(str(self.directory))
         self.window = None
+        self.tty = None
         self.path = None
         self.owned = None
-        self.opened = False
 
     def check(self):
         if sys.platform != "darwin":
-            raise RuntimeError("The file walkthrough requires macOS Terminal and TextEdit.")
+            raise RuntimeError("The file walkthrough requires macOS Terminal.")
         if not self.directory.is_dir() or not os.access(self.directory, os.W_OK):
             raise RuntimeError(f"Choose an existing writable folder: {self.directory}")
+        native_input("check")
 
-    def prepare(self, session):
+    def prepare(self):
         self.check()
-        self.path = self.directory / f"Demio example {Path(session).name}.txt"
+        self.path = self.directory / f"demio-{secrets.token_hex(3)}.txt"
         if self.path.exists() or self.path.is_symlink():
             raise RuntimeError("The sample file already exists.")
-        ready = Path(session) / "terminal-ready"
-        command = shlex.join([
-            "/bin/sh", "-c", 'cd "$1" && /bin/pwd && /usr/bin/touch "$2"',
-            "demio", str(self.directory), str(ready),
-        ])
-        self.window = int(terminal(
+        window, self.tty = terminal(
             "set previousIDs to id of every window\n"
-            "do script (item 1 of argv)\n"
+            'do script ""\n'
             "set demoID to id of front window\n"
             "if demoID is in previousIDs then error \"Terminal did not create a new window.\"\n"
-            "activate\nreturn demoID",
-            command,
-        ))
-        deadline = time.monotonic() + 10
-        while not ready.is_file():
-            if time.monotonic() >= deadline:
-                raise RuntimeError("The demo Terminal window did not reach its first prompt.")
-            time.sleep(0.1)
+            "activate\n"
+            "set demoWindow to window id demoID\n"
+            "repeat 50 times\n"
+            "set demoTTY to tty of selected tab of demoWindow\n"
+            "if demoTTY is not missing value and demoTTY is not \"\" then exit repeat\n"
+            "delay 0.1\nend repeat\n"
+            "return (demoID as text) & linefeed & (demoTTY as text)",
+        ).splitlines()
+        self.window = int(window)
 
-    def command(self, command, *arguments):
-        shell = shlex.join(["/bin/sh", "-c", command, "demio", *map(str, arguments)])
-        terminal(
+    def command(self, text, click=False):
+        bounds = terminal(
             "set demoWindow to window id ((item 1 of argv) as integer)\n"
+            "if id of front window is not id of demoWindow then error \"Return to the rehearsal Terminal window.\"\n"
+            "if tty of selected tab of demoWindow is not (item 2 of argv) then error \"Return to the rehearsal Terminal tab.\"\n"
             "repeat 50 times\n"
             "if not (busy of selected tab of demoWindow) then exit repeat\n"
             "delay 0.1\nend repeat\n"
             "if busy of selected tab of demoWindow then error \"The demo Terminal window is busy.\"\n"
-            "set index of demoWindow to 1\nactivate\n"
-            "do script (item 2 of argv) in selected tab of demoWindow",
-            self.window, shell,
+            "return bounds of demoWindow",
+            self.window, self.tty,
         )
+        native_input("terminal", "click" if click else "type", text, bounds)
+        time.sleep(COMMAND_PAUSE_SECONDS)
+
+    def change_directory(self):
+        self.command(f"cd {self.folder_argument}", click=True)
+
+    def file_argument(self):
+        return f"{self.folder_argument}/{self.path.name}"
+
+    def create_file(self):
+        if self.path.exists() or self.path.is_symlink():
+            raise RuntimeError("The sample file already exists.")
+        self.command(f"touch {self.file_argument()}")
+        self.read_expected("")
+
+    def append(self, line, previous=""):
+        self.read_expected(previous)
+        value = shlex.quote(line.rstrip("\n"))
+        self.command(f"echo {value} >> {self.file_argument()}")
+        self.read_expected(previous + line)
+
+    def show_file(self, expected):
+        self.read_expected(expected)
+        self.command(f"cat {self.file_argument()}")
+        if expected:
+            contents = terminal(
+                "set demoWindow to window id ((item 1 of argv) as integer)\n"
+                "if tty of selected tab of demoWindow is not (item 2 of argv) then error \"Return to the rehearsal Terminal tab.\"\n"
+                "return contents of selected tab of demoWindow",
+                self.window, self.tty,
+            )
+            lines = "\n".join(contents.splitlines())
+            message = expected.rstrip("\n")
+            if f"\n{message}\n" not in f"\n{lines}\n":
+                raise RuntimeError("The greeting did not appear in Terminal.")
 
     def read_expected(self, text):
         deadline = time.monotonic() + 8
@@ -96,17 +145,27 @@ class Walkthrough:
         raise RuntimeError("Terminal did not produce the expected sample file contents.")
 
     def run(self, step):
-        if step == "create":
-            self.command('set -C\n/usr/bin/printf "%s" "$2" > "$1"\n/bin/cat "$1"', self.path, FIRST)
-            self.read_expected(FIRST)
+        if step == "cd":
+            self.change_directory()
+        elif step == "touch":
+            self.create_file()
+        elif step == "empty":
+            self.show_file("")
+        elif step == "write":
+            self.append(GREETING)
+        elif step == "read":
+            self.show_file(GREETING)
+        elif step == "create":
+            self.change_directory()
+            self.create_file()
+            self.append(FIRST)
+            self.show_file(FIRST)
         elif step == "append":
-            self.read_expected(FIRST)
-            self.command('/usr/bin/printf "%s" "$2" >> "$1"\n/bin/cat "$1"', self.path, SECOND)
-            self.read_expected(FIRST + SECOND)
+            self.append(SECOND, FIRST)
+            self.show_file(FIRST + SECOND)
         elif step == "open":
             self.read_expected(FIRST + SECOND)
             self.open_document()
-            self.opened = True
         else:
             raise RuntimeError(f"Unknown Mac step: {step}")
 
@@ -121,17 +180,13 @@ class Walkthrough:
             terminal("set index of window id ((item 1 of argv) as integer) to 1\nactivate", self.window)
 
     def cleanup(self):
-        try:
-            if self.window is not None:
-                terminal(
-                    "set demoWindow to window id ((item 1 of argv) as integer)\n"
-                    "if not (busy of selected tab of demoWindow) then close demoWindow",
-                    self.window,
-                )
-        finally:
-            if self.owned is not None and not self.opened and self.path.is_file():
-                if identity(self.path) == self.owned and self.path.read_text() in (FIRST, FIRST + SECOND):
-                    self.path.unlink()
+        if self.window is not None:
+            terminal(
+                "set demoWindow to window id ((item 1 of argv) as integer)\n"
+                "if (count tabs of demoWindow) is 1 and (tty of selected tab of demoWindow) is (item 2 of argv) then\n"
+                "if not (busy of selected tab of demoWindow) then close demoWindow\nend if",
+                self.window, self.tty,
+            )
 
 
 def main():
@@ -144,7 +199,7 @@ def main():
             if operation == "check":
                 walkthrough.check()
             elif operation == "prepare":
-                walkthrough.prepare(request["session_dir"])
+                walkthrough.prepare()
             elif operation == "run":
                 walkthrough.run(request["step"])
             elif operation == "preview":

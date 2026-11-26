@@ -1,14 +1,16 @@
 # Live browser rehearsals
 
 Use the [generated rehearsals](../../README.md#rehearsals) to browse
-Grace Hopper and Katherine Johnson, follow Ada Lovelace into Wikidata, and
-wait for an IANA download. Each scenario JSON owns its cue and ordered
+Grace Hopper's article, follow Katherine Johnson into Hidden Figures or Ada
+Lovelace into Wikidata, and wait for an IANA download. Each scenario JSON owns its cue and ordered
 steps. `web.py` owns the shared Chrome actions and visible checks.
 
 The standalone `channel.json` uses the stable ID `browser-demo`. It starts
-at Wikipedia search, types Alan Turing, clicks the matching article,
-scrolls down and closes the rehearsal window. Install Python 3.10 or later
-and Google Chrome in `/Applications`. Run the following commands here.
+in an empty Chrome tab, enters Wikipedia's address, searches Alan Turing,
+opens his article and jumps to Career and research using the table of
+contents. It clicks the tab's close button at the end. Install Python 3.10
+or later and Google Chrome in `/Applications`. Allow Accessibility for the
+app launching Demio. Run the following commands here.
 
 ```sh
 python3 -m venv .venv

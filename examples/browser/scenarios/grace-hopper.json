@@ -4,10 +4,11 @@
   "name": "Wikipedia · Grace Hopper",
   "type": "browser",
   "development_tokens": {"input": 2236825, "cached_input": 2218471, "output": 11574, "basis": "allocated"},
-  "description": "Type Grace Hopper into Wikipedia, open the result, scroll and close the window.",
+  "description": "Start in a blank Chrome tab, open Wikipedia, find Grace Hopper, scroll through the article and close the tab.",
   "intro": "Welcome. We will take a short tour of Grace Hopper's Wikipedia article.",
-  "parameters": {"route": "article", "query": "Grace Hopper"},
+  "parameters": {"route": "article", "query": "Grace Hopper", "visible_chrome": true},
   "steps": [
+    {"id": "open-site", "title": "Open Wikipedia", "role": "Presenter", "say": "In the blank Chrome tab I type Wikipedia's address and press Return."},
     {
       "id": "search",
       "title": "Search for Grace Hopper",
@@ -28,9 +29,9 @@
     },
     {
       "id": "close",
-      "title": "Close the rehearsal window",
+      "title": "Click the tab's close button",
       "role": "Presenter",
-      "say": "I close the window."
+      "say": "I move the pointer to the tab's close button and click it."
     }
   ]
 }

@@ -40,8 +40,8 @@ Existing decisions stay in effect; routine implementation choices do not need
 repeated approval. See [the authoring instructions](../templates/demo/AGENTS.md).
 
 Use the four generated browser rehearsals for live presentations.
-`examples/browser/channel.json` is a standalone Wikipedia search, scroll and
-close example with its original ID. It uses the same adapter as the scaffold
+`examples/browser/channel.json` is a standalone example that searches for Alan
+Turing, jumps to a section, and closes the tab. It uses the same adapter as the scaffold
 and expects the Python environment described in the README beside the example.
 
 ## Demo defaults and scenario differences

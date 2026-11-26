@@ -42,7 +42,7 @@ build-cli:
 	cargo build --release --locked
 build-overlay:
 	@mkdir -p "$(CARGO_TARGET_DIR)/release"
-	xcrun swiftc demio-overlay/Overlay.swift -o "$(CARGO_TARGET_DIR)/release/demio-overlay" -framework AppKit -framework Carbon -target arm64-apple-macosx14.0
+	xcrun swiftc demio-overlay/Overlay.swift demio-overlay/NativeInput.swift -o "$(CARGO_TARGET_DIR)/release/demio-overlay" -framework AppKit -framework Carbon -framework ApplicationServices -target arm64-apple-macosx14.0
 lint:
 	cargo fmt --all -- --check
 	cargo clippy --locked --all-targets -- -D warnings

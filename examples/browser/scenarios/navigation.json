@@ -6,8 +6,9 @@
   "development_tokens": {"input": 2561851, "cached_input": 2536688, "output": 13255, "basis": "allocated"},
   "description": "Search for Ada Lovelace, follow the article's Wikidata link in a second tab, then return and close the walkthrough.",
   "intro": "Welcome. We will find the same subject across two public sites. Watch the pointer, typed search and tab order.",
-  "parameters": {"route": "navigation"},
+  "parameters": {"route": "navigation", "visible_chrome": true},
   "steps": [
+    {"id": "open-site", "title": "Open Wikipedia", "role": "Presenter", "say": "I type Wikipedia's address into Chrome's blank tab."},
     {
       "id": "search",
       "title": "Type Ada Lovelace in Wikipedia",
@@ -40,9 +41,9 @@
     },
     {
       "id": "close",
-      "title": "Close the walkthrough window",
+      "title": "Close the two rehearsal tabs",
       "role": "Presenter",
-      "say": "I close the rehearsal window after showing both tabs."
+      "say": "I click the close button on each rehearsal tab."
     }
   ]
 }

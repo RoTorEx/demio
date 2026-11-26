@@ -118,7 +118,10 @@ BrowserType.launch_persistent_context = inspect
                     document.addEventListener('input', event => window.searchInputs.push(event.target.value));
                     document.addEventListener('mousemove', event => window.moves.push([event.clientX, event.clientY]));
                 }""")
-            preceding_steps = 2 if variant == 'waiting' else 3
+            preceding_steps = (
+                next(index for index, step in enumerate(document['steps']) if step['id'] == 'timer')
+                if variant == 'waiting' else 3
+            )
             for step in range(1, preceding_steps + 1):
                 os.write(master, next_key)
                 _, first = expect('Ready', step, after=first['generation'])

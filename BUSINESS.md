@@ -5,7 +5,8 @@
 Demio is a product under personal/projects/dev-tools/demio, comprising demio-cli and
 demio-overlay. demio-cli owns the terminal entry point (`demio`), TUI, registry,
 adapter protocol, sequencing and process cleanup. demio-overlay owns the native
-macOS presenter window and global controls, with no project-action authority.
+macOS presenter window and global controls. Its native input command sends
+visible clicks and keystrokes to the rehearsal windows selected by the adapters.
 The components are built from one Cargo workspace/product root, versioned and
 packaged together, and installed side by side. The Rust package is demio-cli;
 the stable public executable remains demio. Component README files explain
@@ -77,16 +78,20 @@ unavailable. One missing sibling does not invalidate a runnable scenario.
 
 The scaffold creates browser and native Mac rehearsals with local authoring
 instructions. The browser cases use public Wikipedia, Wikidata and IANA pages
-in an isolated Google Chrome profile. The audience sees the pointer, paced
-typing, real link clicks and smooth wheel scrolling. Search results and subsequent
-views follow visible input. The short Wikipedia rehearsals search for
-different people, open the matching article, scroll, and close. The tab
-rehearsal follows Ada Lovelace's published Wikidata link into an owned second
-tab. The IANA rehearsal waits for a real archive download. Closing
-a rehearsal closes its window, and Back after Close previews the cue without
-reopening it. The Mac rehearsal creates one uniquely
-named document in the selected folder, which defaults to the desktop. A
-completed document remains available in TextEdit. Generated demo/scenario IDs use six
+in an isolated Google Chrome profile. Start presents a blank tab. The first
+action types the site's address. The browser cases distinguish article
+scrolling, following a link and waiting for navigation, table-of-contents
+navigation, and working across two tabs. The IANA rehearsal waits for a real
+archive download. Closing a rehearsal clicks the close buttons of its tabs.
+Back after Close previews the cue without opening another window.
+
+The demonstrations ease the pointer over frames spaced 26 ms apart and type
+characters at 90 ms intervals. These timings give the audience time to follow
+the input. Terminal opens a fresh window and waits one second after each
+visible command. The sequence changes to the selected folder, creates a
+unique empty file, checks it with cat, appends `Hello Demio :D`, and reads the
+result. The folder defaults to the Desktop and the file stays there.
+Generated demo/scenario IDs use six
 alphanumeric characters. The authoring agent must explain terminology and
 controls, discuss audience/outcome/environment/allowed effects, propose a brief
 and agree unresolved product choices with the user before implementing behavior.
@@ -151,7 +156,8 @@ The panel initially sits at the lower-right so the left-side contents in the
 browser rehearsals stay reachable. A−/A+ changes the spoken text size by two
 points per click within 9–48 points. Left, center, and
 right alignment apply to the transcript. The header, progress and wait
-instructions are left-aligned. The initial 360 × 288 point content area gives
+instructions are left-aligned. Wait tips and confirmation use yellow. Two
+horizontal rules mark the scrolling text area. The initial 360 × 288 point content area gives
 more room to the 12-point text and the gap between Info and Transcript.
 Presenters can resize the panel or adjust the transcript font, and longer text
 wraps and scrolls. Font size
@@ -255,7 +261,7 @@ endpoint, and generic AI-driven application control remain outside this first mi
 - `docs/scenarios.md`: scenario structure and manual editing workflow.
 - `docs/contracts/adapter.md`: project-agent integration and protocol.
 - `examples/browser`: live Wikipedia, Wikidata and IANA rehearsals.
-- `examples/mac`: Terminal and TextEdit file rehearsal.
+- `examples/mac`: Terminal file rehearsal.
 - `scripts`, `.github/workflows`: packaging, installation, releases.
 
 ## Local product usage evidence

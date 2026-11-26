@@ -133,7 +133,8 @@ data. Once preparation succeeds the presenter shows the distinct first step.
 first row. The fixed-size state button stays beside **Stop** on the second row.
 The scenario name and a muted ID appear above **Step: Introduction (0 of 6)**
 and the separate **Status:** line.
-**Info** and **Transcript** wrap and scroll as the window resizes.
+**Info** and **Transcript** wrap and scroll between two horizontal rules as
+the window resizes. Wait tips and confirmation use yellow.
 The panel opens with a 360 × 288 pt content area and 12 pt body text by
 default. Use the gear to change the transcript size or alignment. Hover over
 **ⓘ** for keyboard shortcuts. Split transcript topics with a blank line and
@@ -192,12 +193,18 @@ with the legacy flag set. [ScreenCaptureKit capture filters](https://developer.a
 ## Rehearsals
 
 Use `demio init` in a fresh directory to generate the reference rehearsals.
-Install Python 3.10 or later and Google Chrome in `/Applications`. Each rehearsal uses its own profile,
-fixed viewport, English locale and light appearance. Watch the mouse, typed
-search, real link clicks and wheel scrolling on Wikipedia, Wikidata and IANA.
-Start with **Wikipedia · Grace Hopper** for search, opening a result, scrolling
-and closing. **Wikipedia · Katherine Johnson** follows a different article.
-**Ada Lovelace · Wikipedia and Wikidata** demonstrates a second tab.
+Install Python 3.10 or later and Google Chrome in `/Applications`. Give the
+app that launches Demio Accessibility access in System Settings for clicks
+and keystrokes in the Chrome toolbar and Terminal. Browser rehearsals use
+their own Chrome profile, a fixed viewport, an English locale and light appearance.
+Start opens a blank tab. Forward types the site address as the first action.
+The final action clicks the tab's close button.
+
+Start with **Wikipedia · Grace Hopper** for search, reading and scrolling.
+**Katherine Johnson · Follow Hidden Figures** follows a real link and waits
+for the destination to load. **Ada Lovelace · Wikipedia and Wikidata**
+demonstrates a second tab. The standalone Alan Turing example uses Wikipedia's
+table of contents to jump to Career and research.
 **IANA download, timer and confirmation** waits for and verifies a published
 archive.
 
@@ -211,10 +218,11 @@ demio list
 demio
 ```
 
-The generated README describes each route and the Mac file walkthrough.
-The Mac example uses the desktop by default and asks
-the presenter to confirm that both lines are visible in TextEdit. To choose
-a different destination, set `parameters.directory` in
+The Mac example opens a fresh Terminal window and types one command at a time.
+It changes to the Desktop, creates a unique file with touch, reads the empty
+file with cat, appends `Hello Demio :D`, and reads it again. It pauses one
+second after each command and leaves the file in its folder. macOS may ask
+for Automation access to Terminal. To choose a different destination, set `parameters.directory` in
 `scenarios/mac-file/scenario.json` to an existing writable folder.
 Existing generated demos keep their own files. To use the current examples on
 another Mac, scaffold and register a fresh folder after installing this bundle.

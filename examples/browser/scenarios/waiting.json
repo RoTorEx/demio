@@ -8,9 +8,11 @@
   "intro": "Welcome. We will read a real time zone release and verify the data the browser downloads from IANA.",
   "parameters": {
     "route": "download",
-    "release": "2026f"
+    "release": "2026f",
+    "visible_chrome": true
   },
   "steps": [
+    {"id": "open-site", "title": "Open IANA Time Zones", "role": "Presenter", "say": "I type the IANA Time Zones address into the blank Chrome tab."},
     {
       "id": "release-history",
       "title": "Open IANA Release History",
@@ -45,9 +47,9 @@
     },
     {
       "id": "close",
-      "title": "Close the walkthrough window",
+      "title": "Click the tab's close button",
       "role": "Presenter",
-      "say": "I close the rehearsal window. The verified archive stays with this session until Stop."
+      "say": "I close the tab with its close button. The verified archive stays with this session until Stop."
     }
   ]
 }

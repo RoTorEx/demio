@@ -8,15 +8,16 @@ owns a route, introduction, ordered steps, narration and parameter overrides.
 
 | Scenario | What to check |
 | --- | --- |
-| Wikipedia · Grace Hopper | Type the name, click the matching result, scroll, and close the rehearsal window. |
-| Wikipedia · Katherine Johnson | Search for Katherine Johnson, open her article, scroll, and close. |
+| Wikipedia · Grace Hopper | Type the Wikipedia address, search for the name, scroll through the article, and click the tab's close button. |
+| Katherine Johnson · Follow Hidden Figures | Find the biography, follow its link to Hidden Figures, and wait for the linked article to load. |
 | Ada Lovelace · Wikipedia and Wikidata | Open the article, scroll, follow its Wikidata link into a second tab, and return to Wikipedia. |
 | IANA download, timer and confirmation | Click Release History and the published release. Wait through the reading timer, verify the downloaded archive and choose Confirm. Return to the history and close. |
-| Mac file walkthrough | Create a unique text file in Terminal, append a line, open the document in TextEdit and confirm that both lines are visible. |
+| Mac file walkthrough | Type cd, touch, cat, echo, and cat in a fresh Terminal window with a one-second pause after each command. The greeting stays in the file. |
 
 The public routes need internet access, Python 3.10 or later, and Google Chrome
-in `/Applications`.
-Start opens a landing page in an isolated profile. The search uses Wikipedia’s
+in `/Applications`. Allow Accessibility for the app that launches Demio
+in System Settings. Start opens a blank tab in an isolated profile. The first
+Forward types the site address. The search uses Wikipedia's
 own field and matching suggestion. Keep the rehearsal tabs in their original
 order. If you switch apps or tabs or open a different page, **Back** shows
 earlier cues. Restore the rehearsal view and choose **Check route** to

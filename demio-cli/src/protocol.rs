@@ -192,6 +192,10 @@ impl Worker {
             .env("DEMIO_WORKSPACE", &workspace)
             .env("DEMIO_SCENARIO", manifest)
             .env(
+                "DEMIO_NATIVE_INPUT",
+                std::env::current_exe()?.with_file_name("demio-overlay"),
+            )
+            .env(
                 "DEMIO_TERMINAL_CONTROLS",
                 if terminal_controls { "1" } else { "0" },
             )

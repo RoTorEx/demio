@@ -1,13 +1,14 @@
 {
   "schema_version": 1,
   "id": "browser-katherine-johnson",
-  "name": "Wikipedia · Katherine Johnson",
+  "name": "Katherine Johnson · Follow Hidden Figures",
   "type": "browser",
   "development_tokens": {"input": 2236838, "cached_input": 2218476, "output": 11584, "basis": "allocated"},
-  "description": "Find Katherine Johnson on Wikipedia, read the article and close the window.",
-  "intro": "Welcome. We will find Katherine Johnson on Wikipedia and look through her article.",
-  "parameters": {"route": "article", "query": "Katherine Johnson"},
+  "description": "Find Katherine Johnson, follow her article's link to Hidden Figures and wait for the linked article to load.",
+  "intro": "Welcome. We will follow a real link from Katherine Johnson's biography to the film Hidden Figures.",
+  "parameters": {"route": "article", "query": "Katherine Johnson", "link_title": "Hidden Figures", "visible_chrome": true},
   "steps": [
+    {"id": "open-site", "title": "Open Wikipedia", "role": "Presenter", "say": "I enter Wikipedia's address in the blank Chrome tab."},
     {
       "id": "search",
       "title": "Search for Katherine Johnson",
@@ -21,16 +22,17 @@
       "say": "I click the matching result and open the article."
     },
     {
-      "id": "read-article",
-      "title": "Scroll through the article",
+      "id": "follow-article",
+      "title": "Follow the Hidden Figures link",
       "role": "Presenter",
-      "say": "I scroll down to read more of the article."
+      "say": "I click the film link in Katherine Johnson's biography and wait for the linked article to load.",
+      "wait": "Wait for the Hidden Figures article to finish loading."
     },
     {
       "id": "close",
-      "title": "Close the rehearsal window",
+      "title": "Click the tab's close button",
       "role": "Presenter",
-      "say": "I close the window."
+      "say": "I click the close button on the Hidden Figures tab."
     }
   ]
 }

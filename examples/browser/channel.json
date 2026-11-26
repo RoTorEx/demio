@@ -1,15 +1,16 @@
 {
   "schema_version": 1,
   "id": "browser-demo",
-  "name": "Wikipedia · Alan Turing",
+  "name": "Alan Turing · Jump with the contents",
   "type": "browser",
   "development_tokens": {"input": 701009, "cached_input": 692571, "output": 6332, "basis": "allocated"},
   "workspace": ".",
   "adapter": [".venv/bin/python", "-u", "web.py"],
-  "parameters": {"route": "article", "query": "Alan Turing"},
+  "parameters": {"route": "article", "query": "Alan Turing", "section": "Career_and_research", "visible_chrome": true},
   "session_seconds": 7200,
-  "intro": "Welcome. We will find Alan Turing on Wikipedia and look through his article.",
+  "intro": "Welcome. We will find Alan Turing and jump from his article's contents to his career and research.",
   "steps": [
+    {"id": "open-site", "title": "Open Wikipedia", "role": "Presenter", "say": "I type Wikipedia's address in the empty Chrome tab."},
     {
       "id": "search",
       "title": "Search for Alan Turing",
@@ -23,19 +24,19 @@
       "say": "I click the result in the search suggestions and check the article heading."
     },
     {
-      "id": "read-article",
-      "title": "Scroll through the article",
+      "id": "read-section",
+      "title": "Jump to Career and research",
       "role": "Presenter",
-      "say": "I scroll down through the article at a readable pace."
+      "say": "I click Career and research in the article's table of contents."
     },
     {
       "id": "close",
-      "title": "Close the walkthrough window",
+      "title": "Click the tab's close button",
       "role": "Presenter",
-      "say": "I close the rehearsal window after reading the article."
+      "say": "I close the tab with its close button."
     }
   ],
   "project": "Demio",
-  "description": "Search Wikipedia for Alan Turing, open the article, scroll and close the rehearsal window.",
+  "description": "Find Alan Turing, use the article's contents to jump to Career and research, and close the tab.",
   "created_at": "2026-10-14T12:39:09.558352+02:00"
 }

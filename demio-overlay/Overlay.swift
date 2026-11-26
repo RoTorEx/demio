@@ -2,11 +2,6 @@ import AppKit
 import Carbon
 
 let buildVersion = "0.2.1"
-if CommandLine.arguments.contains("--version") {
-    print("demio-overlay \(buildVersion)")
-    exit(0)
-}
-guard CommandLine.arguments.count >= 3 else { exit(2) }
 let session = URL(fileURLWithPath: CommandLine.arguments[1])
 let owner = Int32(CommandLine.arguments[2]) ?? 0
 func send(_ command: String) { print(command); fflush(stdout) }
@@ -46,6 +41,7 @@ struct PresenterFrame: Decodable {
         switch status {
         case "Ready", "Finished": .systemGreen
         case "Preparing", "Working", "Waiting", "Checking route", "Restoring route": .systemBlue
+        case "Awaiting confirmation": .systemYellow
         case "Route changed", "Step failed", "Preparation failed", "Preview failed",
              "Outcome unknown", "Session expired": .systemRed
         default: .labelColor
@@ -84,6 +80,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
     var next: NSButton!
     var stateButton: NSButton!
     var stop: NSButton!
+    let notesTop = NSBox()
     let separator = NSBox()
     var frame: PresenterFrame?
     let cue = NSTextView()
@@ -160,7 +157,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
             append(frame.detail + "\n", font: infoFont)
         }
         if !frame.offRoute && !frame.wait.isEmpty {
-            append("Wait: \(frame.wait)\n", font: infoFont, color: .systemRed)
+            append("Wait: \(frame.wait)\n", font: infoFont, color: .systemYellow)
         }
         if frame.showsTranscript && !frame.say.isEmpty {
             append("Transcript\n", font: headingFont, before: 12, after: 4)
@@ -349,7 +346,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
         let origin = NSPoint(x: screen.maxX - initialContentSize.width - 25, y: screen.minY + 25)
         notes = panel(NSRect(origin: origin, size: initialContentSize), resizable: true)
-        notes.contentMinSize = NSSize(width: 320, height: 232)
+        notes.contentMinSize = NSSize(width: 320, height: 242)
         let row = NSStackView()
         row.orientation = .horizontal
         row.distribution = .fillEqually
@@ -411,8 +408,9 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         cue.textContainer?.widthTracksTextView = true
         cue.textContainer?.containerSize = NSSize(width: initialContentSize.width - 30, height: CGFloat.greatestFiniteMagnitude)
         scroll.documentView = cue
+        notesTop.boxType = .separator
         separator.boxType = .separator
-        for view in [header, metadata, scroll, separator, row, stateRow] as [NSView] { body.addArrangedSubview(view) }
+        for view in [header, metadata, notesTop, scroll, separator, row, stateRow] as [NSView] { body.addArrangedSubview(view) }
         notes.contentView!.addSubview(body)
         NSLayoutConstraint.activate([
             body.leadingAnchor.constraint(equalTo: notes.contentView!.leadingAnchor, constant: 12),
@@ -423,6 +421,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
             metadata.widthAnchor.constraint(equalTo: body.widthAnchor),
             step.widthAnchor.constraint(equalTo: metadata.widthAnchor),
             status.widthAnchor.constraint(equalTo: metadata.widthAnchor),
+            notesTop.widthAnchor.constraint(equalTo: body.widthAnchor),
             scroll.widthAnchor.constraint(equalTo: body.widthAnchor),
             separator.widthAnchor.constraint(equalTo: body.widthAnchor),
             row.widthAnchor.constraint(equalTo: body.widthAnchor),
@@ -624,7 +623,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         do { try tipData.write(to: session.appendingPathComponent("panel.json"), options: .atomic) } catch { exit(15) }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             guard self.cue.string.contains("Wait: Copilot's reply"),
-                  attributes(at: "Wait: Copilot's reply")?[.foregroundColor] as? NSColor == NSColor.systemRed,
+                  attributes(at: "Wait: Copilot's reply")?[.foregroundColor] as? NSColor == NSColor.systemYellow,
                   attributes(at: "Wait: Copilot's reply")?[.font] as? NSFont == .systemFont(ofSize: 12),
                   attributes(at: "Narration.")?[.font] as? NSFont == .systemFont(ofSize: self.fontSize),
                   let noteFont = attributes(at: "<Presenter note>")?[.font] as? NSFont,
@@ -729,8 +728,31 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         }
     }
 }
-let application = NSApplication.shared
-application.setActivationPolicy(.accessory)
-let controller = Controller()
-application.delegate = controller
-application.run()
+@main
+struct OverlayMain {
+    static func main() {
+        let arguments = CommandLine.arguments
+        if arguments.contains("--version") {
+            print("demio-overlay \(buildVersion)")
+            return
+        }
+        if arguments.dropFirst().first == "--native-input" {
+            do {
+                try NativeInput.run(Array(arguments.dropFirst(2)))
+            } catch let error as InputFailure {
+                fputs(error.message + "\n", stderr)
+                exit(error.offRoute ? 3 : 2)
+            } catch {
+                fputs(error.localizedDescription + "\n", stderr)
+                exit(2)
+            }
+            return
+        }
+        guard arguments.count >= 3 else { exit(2) }
+        let application = NSApplication.shared
+        application.setActivationPolicy(.accessory)
+        let controller = Controller()
+        application.delegate = controller
+        application.run()
+    }
+}

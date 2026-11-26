@@ -11,11 +11,15 @@ from urllib.parse import quote
 
 
 WIKIPEDIA = "https://www.wikipedia.org/"
+WIKI_ARTICLES = "https://en.wikipedia.org/wiki/"
 DEFAULT_QUERY = "Ada Lovelace"
 WIKIDATA = "https://www.wikidata.org/wiki/Q7259"
 TIME_ZONES = "https://www.iana.org/time-zones"
 RELEASES = "https://www.iana.org/time-zones/releases"
 CHROME = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+BLANK_TABS = {"about:blank", "chrome://newtab/", "chrome://new-tab-page/"}
+MOVE_FRAME_MS = 26
+TYPE_DELAY_MS = 90
 
 class RouteChanged(RuntimeError):
     pass
@@ -27,6 +31,23 @@ class Point(ctypes.Structure):
 
 def ease(progress):
     return progress * progress * (3 - 2 * progress)
+
+
+def article_url(title):
+    return WIKI_ARTICLES + quote(title.replace(" ", "_"), safe="")
+
+
+def native_input(*arguments):
+    helper = os.environ.get("DEMIO_NATIVE_INPUT")
+    if not helper:
+        raise RuntimeError("Run this rehearsal with the Demio native bundle.")
+    result = subprocess.run(
+        [helper, "--native-input", *map(str, arguments)], capture_output=True, text=True, timeout=25
+    )
+    if result.returncode == 3:
+        raise RouteChanged(result.stderr.strip())
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or "The Chrome control could not be used.")
 
 
 class BrowserInput:
@@ -41,9 +62,19 @@ class BrowserInput:
             self.warp = graphics.CGWarpMouseCursorPosition
             self.warp.argtypes = [Point]
             self.warp.restype = ctypes.c_int32
+            self.event = graphics.CGEventCreate
+            self.event.argtypes = [ctypes.c_void_p]
+            self.event.restype = ctypes.c_void_p
+            self.location = graphics.CGEventGetLocation
+            self.location.argtypes = [ctypes.c_void_p]
+            self.location.restype = Point
+            foundation = ctypes.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+            self.release = foundation.CFRelease
+            self.release.argtypes = [ctypes.c_void_p]
+            self.release.restype = None
 
-    def track_focus(self, session):
-        if not self.focus_required:
+    def track_focus(self, session, native_controls):
+        if not self.focus_required and not native_controls:
             return
         self.focus_path = Path(session) / "foreground-pid"
         children = {}
@@ -83,6 +114,11 @@ class BrowserInput:
                 raise RouteChanged("Return to the rehearsal tab in Chrome.")
             if visible and 0 <= frame_width <= 12 and 0 < toolbar < 250:
                 origin = (left + frame_width / 2, top + toolbar - 1)
+                event = self.event(None)
+                if event:
+                    cursor = self.location(event)
+                    self.release(event)
+                    start_x, start_y = cursor.x - origin[0], cursor.y - origin[1]
         for step in range(19):
             if step in (6, 12, 18):
                 self.verify_focus()
@@ -91,8 +127,9 @@ class BrowserInput:
             py = start_y + (y - start_y) * eased
             if origin:
                 self.warp(Point(origin[0] + px, origin[1] + py))
-            page.mouse.move(px, py)
-            page.wait_for_timeout(20)
+            if 0 <= px < size["width"] and 0 <= py < size["height"]:
+                page.mouse.move(px, py)
+            page.wait_for_timeout(MOVE_FRAME_MS)
         self.position = (x, y)
 
     def click(self, page, target, modifier=None):
@@ -139,7 +176,7 @@ class BrowserInput:
             if traveled != sent:
                 page.mouse.wheel(0, traveled - sent)
                 sent = traveled
-            page.wait_for_timeout(22)
+            page.wait_for_timeout(29)
         page.wait_for_timeout(80)
         if page.evaluate("scrollY") == before:
             raise RuntimeError("The browser view did not scroll.")
@@ -149,10 +186,15 @@ class Walkthrough:
     def __init__(self):
         self.parameters = json.loads(os.environ.get("DEMIO_PARAMETERS", "{}"))
         self.route = self.parameters["route"]
+        self.visible_chrome = self.parameters.get("visible_chrome", False)
         # The section and Wikidata routes follow Ada Lovelace's original pages.
         self.query = self.parameters.get("query", DEFAULT_QUERY) if self.route == "article" else DEFAULT_QUERY
-        self.article = "https://en.wikipedia.org/wiki/" + quote(self.query.replace(" ", "_"), safe="")
+        self.article = article_url(self.query)
+        self.link_title = self.parameters.get("link_title")
+        self.link_url = article_url(self.link_title) if self.link_title else None
+        self.section_fragment = "#" + quote(self.parameters["section"], safe="_") if "section" in self.parameters else ""
         self.view_names = {
+            "about:blank": "the blank Chrome tab",
             WIKIPEDIA: "Wikipedia search",
             self.article: f"the {self.query} article",
             self.article + "#Biography": "Biography in Wikipedia",
@@ -161,7 +203,12 @@ class Walkthrough:
             TIME_ZONES: "IANA Time Zones",
             RELEASES: "IANA Release History",
         }
+        if self.link_url:
+            self.view_names[self.link_url] = f"the {self.link_title} article"
+        if self.section_fragment:
+            self.view_names[self.article + self.section_fragment] = f"the section in {self.query}'s article"
         self.headless = os.environ.get("DEMIO_HEADLESS") == "1"
+        self.native_chrome = self.visible_chrome and not self.headless
         self.focus_required = not self.headless and os.environ.get("DEMIO_TERMINAL_CONTROLS") != "1"
         self.input = BrowserInput(self.headless, self.focus_required)
         self.playwright = self.context = self.page = self.data_tab = None
@@ -175,6 +222,8 @@ class Walkthrough:
                     raise RuntimeError("Install pinned Chromium with Playwright before running.")
         elif not CHROME.is_file():
             raise RuntimeError("Install Google Chrome in /Applications before running.")
+        if self.native_chrome:
+            native_input("check")
 
     def verify_page(self, page, url, heading):
         from playwright.sync_api import expect
@@ -185,6 +234,8 @@ class Walkthrough:
     def prepare(self, session):
         from playwright.sync_api import sync_playwright
 
+        if self.native_chrome:
+            native_input("check")
         self.playwright = sync_playwright().start()
         self.context = self.playwright.chromium.launch_persistent_context(
             str(Path(session) / "browser"),
@@ -193,46 +244,64 @@ class Walkthrough:
             viewport={"width": 1280, "height": 800},
             locale="en-US",
             color_scheme="light",
+            args=["--lang=en-US"] if self.native_chrome else None,
         )
         self.context.set_default_timeout(10000)
-        self.input.track_focus(session)
+        self.input.track_focus(session, self.native_chrome)
         self.page = self.context.pages[0]
+        if not self.visible_chrome:
+            self.open_site()
+        self.page.bring_to_front()
+
+    def open_site(self, show_input=False):
         landing = TIME_ZONES if self.route == "download" else WIKIPEDIA
-        response = self.page.goto(landing, wait_until="domcontentloaded", timeout=25000)
-        if not response or not response.ok:
-            raise RuntimeError(f"The public landing page did not load: {landing}")
+        if show_input and self.native_chrome:
+            native_input("address", self.input.chrome_pid, landing)
+            self.page.wait_for_url(landing, wait_until="domcontentloaded", timeout=25000)
+        else:
+            response = self.page.goto(landing, wait_until="domcontentloaded", timeout=25000)
+            if not response or not response.ok:
+                raise RuntimeError(f"The public landing page did not load: {landing}")
         if self.route == "download":
             self.verify_page(self.page, TIME_ZONES, "Time Zones")
         else:
             self.page.locator("#searchInput").wait_for(state="visible")
-        self.page.bring_to_front()
 
     def inspect_route(self, step):
         self.input.verify_focus()
         url = {
             "search": WIKIPEDIA, "open-article": WIKIPEDIA,
             "article": self.article, "biography": self.article, "read-article": self.article,
+            "follow-article": self.article, "read-section": self.article,
             "data": self.article + "#Work", "return": WIKIDATA,
             "await-work": self.article + "#Biography", "check-work": self.article + "#Biography",
             "read-work": self.article + "#Work",
         }.get(step)
         page = self.page
         tabs = [self.page]
-        if self.route == "download":
+        if step == "open-site":
+            url = "about:blank"
+        elif self.route == "download":
             release = RELEASES + "/" + self.parameters["release"]
             url = {
                 "release-history": TIME_ZONES, "release": RELEASES,
                 "timer": release, "download": release, "return": release, "close": RELEASES,
             }.get(step)
         elif self.route == "navigation":
-            if step == "return":
+            if step == "close" and self.page.is_closed():
+                # The first click may already have closed Wikipedia in this step.
+                page, tabs, url = self.data_tab, [self.data_tab], WIKIDATA
+            elif step == "return":
                 page = self.data_tab
-            if step in ("return", "close"):
                 tabs.append(self.data_tab)
-            if step == "close":
+            elif step == "close":
+                tabs.append(self.data_tab)
                 url = self.article + "#Biography"
         elif step == "close":
-            url = self.article if self.route == "article" else self.article + "#Work"
+            url = (
+                self.link_url or self.article + self.section_fragment
+                if self.route == "article" else self.article + "#Work"
+            )
         if url is None:
             raise RuntimeError(f"No route defined for {step}.")
         if not self.context or not page or page.is_closed():
@@ -255,7 +324,7 @@ class Walkthrough:
             raise RouteChanged("A rehearsal tab was closed. Stop and start a fresh run.")
         if self.context.pages != tabs:
             raise RouteChanged("Close extra tabs in the rehearsal window.")
-        if current != url:
+        if current != url and not (step == "open-site" and current in BLANK_TABS):
             name = self.view_names.get(url, f"IANA release {self.parameters.get('release')}")
             raise RouteChanged(f"Return to {name} in the rehearsal tab.")
         if not visible:
@@ -266,7 +335,7 @@ class Walkthrough:
 
     def verify_route(self, step):
         focused, query, result = self.inspect_route(step)
-        if self.focus_required and not focused:
+        if step != "open-site" and self.focus_required and not focused:
             raise RouteChanged("Click inside the rehearsal page in Chrome.")
         if step == "search" and query != "":
             raise RouteChanged("Clear the Wikipedia search field.")
@@ -302,7 +371,7 @@ class Walkthrough:
         if replace:
             field.press("Meta+A" if sys.platform == "darwin" else "Control+A")
             field.press("Backspace")
-        field.press_sequentially(self.query, delay=75)
+        field.press_sequentially(self.query, delay=TYPE_DELAY_MS)
         expect(field).to_have_value(self.query)
         self.result_link().wait_for(state="visible")
         self.page.wait_for_timeout(650)
@@ -310,6 +379,26 @@ class Walkthrough:
     def open_article(self):
         self.input.click(self.page, self.result_link())
         self.verify_page(self.page, self.article, self.query)
+
+    def follow_article(self, request):
+        if not self.link_url:
+            raise RuntimeError("Choose the title of a linked article.")
+        article_path = self.link_url.removeprefix("https://en.wikipedia.org")
+        relative_path = "." + article_path.removeprefix("/wiki")
+        selectors = [f'a[href="{path}"]:visible' for path in (article_path, relative_path, self.link_url)]
+        link = self.page.locator(", ".join(selectors)).first
+        respond(request, "status", waiting=True, detail=f"Waiting for {self.link_title} to open.")
+        self.input.click(self.page, link)
+        self.verify_page(self.page, self.link_url, self.link_title)
+
+    def close_tabs(self):
+        if self.native_chrome:
+            for page in self.context.pages:
+                with page.expect_event("close", timeout=10000):
+                    native_input("close-tab", self.input.chrome_pid, page.title())
+        else:
+            self.context.close()
+            self.context = None
 
     def section(self, fragment):
         self.page.bring_to_front()
@@ -403,7 +492,7 @@ class Walkthrough:
             raise RuntimeError(f"Unknown article step: {step}")
 
     def preview(self, step):
-        if not self.context:
+        if not self.context or self.page.is_closed():
             return  # A completed Close leaves the browser closed during cue review.
         self.input.verify_focus()
         if step == "data" and self.data_tab and not self.data_tab.is_closed():
@@ -416,13 +505,18 @@ class Walkthrough:
     def run(self, request):
         step = request["step"]
         self.verify_route(step)
-        if step == "search":
+        if step == "open-site":
+            self.open_site(show_input=True)
+        elif step == "search":
             self.search()
         elif step == "open-article":
             self.open_article()
         elif step == "close":
-            self.context.close()
-            self.context = None
+            self.close_tabs()
+        elif step == "follow-article":
+            self.follow_article(request)
+        elif step == "read-section":
+            self.section(self.section_fragment)
         elif self.route == "navigation":
             self.navigation(step)
         elif self.route == "download":

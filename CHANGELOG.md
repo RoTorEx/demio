@@ -24,6 +24,12 @@
   presenter returns to the expected page.
 - Let Back review earlier cues while the route is paused. Give the public
   Wikipedia examples different articles and simple, continuous paths.
+- Open a blank Chrome tab and type the site's address. Give the examples
+  distinct navigation and waiting actions, and click the tab's close button.
+- Type the Terminal file walkthrough one command at a time and leave the file
+  on disk. Slow pointer movement and typing across the visible input.
+- Mark the edges of the scrolling notes area and use yellow for wait cues and
+  confirmation.
 
 ## [0.2.1] - 2026-11-26
 
