@@ -7,24 +7,15 @@ import subprocess
 import sys
 import tarfile
 import time
+from urllib.parse import quote
 
 
 WIKIPEDIA = "https://www.wikipedia.org/"
-ARTICLE = "https://en.wikipedia.org/wiki/Ada_Lovelace"
-QUERY = "Ada Lovelace"
+DEFAULT_QUERY = "Ada Lovelace"
 WIKIDATA = "https://www.wikidata.org/wiki/Q7259"
 TIME_ZONES = "https://www.iana.org/time-zones"
 RELEASES = "https://www.iana.org/time-zones/releases"
 CHROME = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
-VIEW_NAMES = {
-    WIKIPEDIA: "Wikipedia search",
-    ARTICLE: "the Ada Lovelace article",
-    ARTICLE + "#Biography": "Biography in Wikipedia",
-    ARTICLE + "#Work": "Work in Wikipedia",
-    WIKIDATA: "the Ada Lovelace entry in Wikidata",
-    TIME_ZONES: "IANA Time Zones",
-    RELEASES: "IANA Release History",
-}
 
 class RouteChanged(RuntimeError):
     pass
@@ -158,6 +149,18 @@ class Walkthrough:
     def __init__(self):
         self.parameters = json.loads(os.environ.get("DEMIO_PARAMETERS", "{}"))
         self.route = self.parameters["route"]
+        # The section and Wikidata routes follow Ada Lovelace's original pages.
+        self.query = self.parameters.get("query", DEFAULT_QUERY) if self.route == "article" else DEFAULT_QUERY
+        self.article = "https://en.wikipedia.org/wiki/" + quote(self.query.replace(" ", "_"), safe="")
+        self.view_names = {
+            WIKIPEDIA: "Wikipedia search",
+            self.article: f"the {self.query} article",
+            self.article + "#Biography": "Biography in Wikipedia",
+            self.article + "#Work": "Work in Wikipedia",
+            WIKIDATA: "the Ada Lovelace entry in Wikidata",
+            TIME_ZONES: "IANA Time Zones",
+            RELEASES: "IANA Release History",
+        }
         self.headless = os.environ.get("DEMIO_HEADLESS") == "1"
         self.focus_required = not self.headless and os.environ.get("DEMIO_TERMINAL_CONTROLS") != "1"
         self.input = BrowserInput(self.headless, self.focus_required)
@@ -208,10 +211,10 @@ class Walkthrough:
         self.input.verify_focus()
         url = {
             "search": WIKIPEDIA, "open-article": WIKIPEDIA,
-            "article": ARTICLE, "biography": ARTICLE, "read-article": ARTICLE,
-            "data": ARTICLE + "#Work", "return": WIKIDATA,
-            "await-work": ARTICLE + "#Biography", "check-work": ARTICLE + "#Biography",
-            "read-work": ARTICLE + "#Work",
+            "article": self.article, "biography": self.article, "read-article": self.article,
+            "data": self.article + "#Work", "return": WIKIDATA,
+            "await-work": self.article + "#Biography", "check-work": self.article + "#Biography",
+            "read-work": self.article + "#Work",
         }.get(step)
         page = self.page
         tabs = [self.page]
@@ -227,9 +230,9 @@ class Walkthrough:
             if step in ("return", "close"):
                 tabs.append(self.data_tab)
             if step == "close":
-                url = ARTICLE + "#Biography"
+                url = self.article + "#Biography"
         elif step == "close":
-            url = ARTICLE if self.route == "article" else ARTICLE + "#Work"
+            url = self.article if self.route == "article" else self.article + "#Work"
         if url is None:
             raise RuntimeError(f"No route defined for {step}.")
         if not self.context or not page or page.is_closed():
@@ -243,7 +246,7 @@ class Walkthrough:
                             input ? input.value : null,
                             Boolean(link && link.getClientRects().length)];
                 }""",
-                [step in ("search", "open-article"), ARTICLE],
+                [step in ("search", "open-article"), self.article],
             )
         except Exception as error:
             raise RouteChanged("Wait for the rehearsal tab to load, then check the route.") from error
@@ -253,7 +256,7 @@ class Walkthrough:
         if self.context.pages != tabs:
             raise RouteChanged("Close extra tabs in the rehearsal window.")
         if current != url:
-            name = VIEW_NAMES.get(url, f"IANA release {self.parameters.get('release')}")
+            name = self.view_names.get(url, f"IANA release {self.parameters.get('release')}")
             raise RouteChanged(f"Return to {name} in the rehearsal tab.")
         if not visible:
             raise RouteChanged("Return to the rehearsal tab in Chrome.")
@@ -268,9 +271,9 @@ class Walkthrough:
         if step == "search" and query != "":
             raise RouteChanged("Clear the Wikipedia search field.")
         if step == "open-article":
-            if query not in ("", QUERY):
+            if query not in ("", self.query):
                 raise RouteChanged("Clear the Wikipedia search field.")
-            if query != QUERY or not result:
+            if query != self.query or not result:
                 raise RouteChanged("Select Check route to repeat the Wikipedia search.")
 
     def restore_route(self, step):
@@ -278,7 +281,7 @@ class Walkthrough:
             self.verify_route(step)
             return
         focused, query, result = self.inspect_route(step)
-        if query not in ("", QUERY):
+        if query not in ("", self.query):
             raise RouteChanged("Clear the Wikipedia search field.")
         if query == "" or not result:
             self.search(replace=bool(query))
@@ -289,7 +292,7 @@ class Walkthrough:
         self.verify_route(step)
 
     def result_link(self):
-        return self.page.locator(f'a[href="{ARTICLE}"]:visible').first
+        return self.page.locator(f'a[href="{self.article}"]:visible').first
 
     def search(self, replace=False):
         from playwright.sync_api import expect
@@ -299,22 +302,22 @@ class Walkthrough:
         if replace:
             field.press("Meta+A" if sys.platform == "darwin" else "Control+A")
             field.press("Backspace")
-        field.press_sequentially(QUERY, delay=75)
-        expect(field).to_have_value(QUERY)
+        field.press_sequentially(self.query, delay=75)
+        expect(field).to_have_value(self.query)
         self.result_link().wait_for(state="visible")
         self.page.wait_for_timeout(650)
 
     def open_article(self):
         self.input.click(self.page, self.result_link())
-        self.verify_page(self.page, ARTICLE, QUERY)
+        self.verify_page(self.page, self.article, self.query)
 
     def section(self, fragment):
         self.page.bring_to_front()
-        if self.page.evaluate("location.href.split('#')[0]") != ARTICLE:
+        if self.page.evaluate("location.href.split('#')[0]") != self.article:
             raise RuntimeError("Return to the expected Wikipedia article before selecting its section.")
         self.input.click(self.page, self.page.locator(f'a[href="{fragment}"]:visible').first)
         self.page.locator(fragment).wait_for(state="visible", timeout=10000)
-        self.page.wait_for_url(ARTICLE + fragment, timeout=10000)
+        self.page.wait_for_url(self.article + fragment, timeout=10000)
 
     def navigation(self, step):
         if step == "article":
@@ -328,7 +331,7 @@ class Walkthrough:
             with self.context.expect_page() as opened:
                 self.input.click(self.page, link, modifier="Meta" if sys.platform == "darwin" else "Control")
             self.data_tab = opened.value
-            self.verify_page(self.data_tab, WIKIDATA, QUERY)
+            self.verify_page(self.data_tab, WIKIDATA, self.query)
             self.data_tab.bring_to_front()
         elif step == "return":
             self.section("#Biography")
@@ -376,7 +379,7 @@ class Walkthrough:
             raise RuntimeError(f"Unknown download step: {step}")
 
     def check_work(self):
-        if self.page.evaluate("location.href") != ARTICLE + "#Work":
+        if self.page.evaluate("location.href") != self.article + "#Work":
             raise RuntimeError("Work is not open. Select Work in the article contents and verify the heading.")
         self.page.get_by_role("heading", name="Work", exact=True).wait_for(state="visible")
 
@@ -386,7 +389,7 @@ class Walkthrough:
             self.section("#Biography")
         elif step == "await-work":
             respond(request, "status", waiting=True, detail="Waiting for the article’s Work link.")
-            self.page.wait_for_url(ARTICLE + "#Work", wait_until="commit", timeout=30000)
+            self.page.wait_for_url(self.article + "#Work", wait_until="commit", timeout=30000)
             self.check_work()
         elif step == "check-work":
             self.check_work()
@@ -394,7 +397,7 @@ class Walkthrough:
             self.check_work()
             self.input.wheel(self.page, 800)
         elif step == "read-article":
-            self.verify_page(self.page, ARTICLE, QUERY)
+            self.verify_page(self.page, self.article, self.query)
             self.input.wheel(self.page, 800)
         else:
             raise RuntimeError(f"Unknown article step: {step}")

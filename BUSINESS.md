@@ -79,9 +79,10 @@ The scaffold creates browser and native Mac rehearsals with local authoring
 instructions. The browser cases use public Wikipedia, Wikidata and IANA pages
 in an isolated Google Chrome profile. The audience sees the pointer, paced
 typing, real link clicks and smooth wheel scrolling. Search results and subsequent
-views follow visible input. Manual recovery requires the presenter to select
-Work and confirm before the adapter verifies and scrolls that section. The tab
-rehearsal follows the published Wikidata link into an owned second tab. Closing
+views follow visible input. The short Wikipedia rehearsals search for
+different people, open the matching article, scroll, and close. The tab
+rehearsal follows Ada Lovelace's published Wikidata link into an owned second
+tab. The IANA rehearsal waits for a real archive download. Closing
 a rehearsal closes its window, and Back after Close previews the cue without
 reopening it. The Mac rehearsal creates one uniquely
 named document in the selected folder, which defaults to the desktop. A
@@ -135,9 +136,10 @@ and the controls. Start scenario invokes the adapter and prepares the
 environment. Successful preparation shows the first executable step with its
 own narration. Next runs that step. A step contains its ID, title, role,
 narration text, operation timeout, and optional confirmation requirement.
-The panel header shows the scenario name and ID, the step and position, and
-the current status on its own line. **Info** and **Transcript** share the
-header's left edge. Both use bold section headings and regular-weight body
+The panel header shows the scenario name and a muted ID, followed by **Step:**
+and **Status:** lines. Ready is green, work in progress is blue, and failures
+or detours are red. **Info** and **Transcript** share the header's left edge.
+Both use bold section headings and regular-weight body
 text. Transcript paragraphs separate topics. Muted italic text in angle
 brackets is a private cue for the presenter. The movable, resizable presenter
 separates notes from navigation with a horizontal rule. Back, Start
@@ -184,9 +186,10 @@ redrawing or writing a new panel frame on unchanged results. The public Chrome
 adapter checks the expected tab, page and search prerequisites. The native
 presenter publishes macOS foreground changes so the adapter can distinguish its
 Chrome instance when another application has focus. A detected
-detour highlights the status and Info in red and hides the transcript.
-Check route can repair the view when the adapter supports restoring disposable
-state. When the presenter returns to Wikipedia search, the browser adapter can
+detour highlights the status in red and hides the current transcript. Back
+shows the previous cue while the adapter stays paused. Check route can repair
+the view when the adapter supports restoring disposable state. When the
+presenter returns to Wikipedia search, the browser adapter can
 repeat the search and verify its suggestion. A successful check makes Forward
 available for the separate pending step.
 

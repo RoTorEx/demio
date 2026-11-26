@@ -1,24 +1,24 @@
 {
   "schema_version": 1,
   "id": "browser-demo",
-  "name": "Wikipedia search and scroll",
+  "name": "Wikipedia · Alan Turing",
   "type": "browser",
   "development_tokens": {"input": 701009, "cached_input": 692571, "output": 6332, "basis": "allocated"},
   "workspace": ".",
   "adapter": [".venv/bin/python", "-u", "web.py"],
-  "parameters": {"route": "article"},
+  "parameters": {"route": "article", "query": "Alan Turing"},
   "session_seconds": 7200,
-  "intro": "Welcome. We will find and read a public article in a short browser walkthrough.",
+  "intro": "Welcome. We will find Alan Turing on Wikipedia and look through his article.",
   "steps": [
     {
       "id": "search",
-      "title": "Type Ada Lovelace in Wikipedia",
+      "title": "Search for Alan Turing",
       "role": "Presenter",
-      "say": "I move to Wikipedia's search field and type Ada Lovelace. The matching article appears below the field."
+      "say": "I move to Wikipedia's search field and type Alan Turing. The matching article appears below the field."
     },
     {
       "id": "open-article",
-      "title": "Click the Ada Lovelace result",
+      "title": "Open the Alan Turing article",
       "role": "Presenter",
       "say": "I click the result in the search suggestions and check the article heading."
     },
@@ -36,6 +36,6 @@
     }
   ],
   "project": "Demio",
-  "description": "Search Wikipedia, click the real article, scroll and close the rehearsal window.",
+  "description": "Search Wikipedia for Alan Turing, open the article, scroll and close the rehearsal window.",
   "created_at": "2026-10-14T12:39:09.558352+02:00"
 }

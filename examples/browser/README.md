@@ -1,12 +1,12 @@
 # Live browser rehearsals
 
-Use the [generated rehearsals](../../README.md#rehearsals) to try the
-Wikipedia/Wikidata tab order, IANA timer and download, and the manual
-recovery and timeout cases. Each scenario JSON owns its cue and ordered
+Use the [generated rehearsals](../../README.md#rehearsals) to browse
+Grace Hopper and Katherine Johnson, follow Ada Lovelace into Wikidata, and
+wait for an IANA download. Each scenario JSON owns its cue and ordered
 steps. `web.py` owns the shared Chrome actions and visible checks.
 
 The standalone `channel.json` uses the stable ID `browser-demo`. It starts
-at Wikipedia search, types Ada Lovelace, clicks the matching article,
+at Wikipedia search, types Alan Turing, clicks the matching article,
 scrolls down and closes the rehearsal window. Install Python 3.10 or later
 and Google Chrome in `/Applications`. Run the following commands here.
 
@@ -21,3 +21,6 @@ demio run browser-demo
 
 Step zero is the introduction. Press **Start** to prepare Chrome and
 **Forward** to perform the current action. **Stop** ends the session.
+
+The `article` route uses `parameters.query` as the search text and the
+English Wikipedia article title.

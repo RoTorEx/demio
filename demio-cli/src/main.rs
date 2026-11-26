@@ -284,12 +284,12 @@ fn scaffold(path: &Path) -> Result<()> {
             include_str!("../../examples/browser/scenarios/waiting.json"),
         ),
         (
-            "timeout",
-            include_str!("../../examples/browser/scenarios/timeout.json"),
+            "katherine-johnson",
+            include_str!("../../examples/browser/scenarios/katherine-johnson.json"),
         ),
         (
-            "recovery",
-            include_str!("../../examples/browser/scenarios/recovery.json"),
+            "grace-hopper",
+            include_str!("../../examples/browser/scenarios/grace-hopper.json"),
         ),
         ("mac-file", include_str!("../../examples/mac/scenario.json")),
     ];

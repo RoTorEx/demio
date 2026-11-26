@@ -53,6 +53,13 @@ BrowserType.launch_persistent_context = inspect
     definition = json.loads(manifest.read_text())
     # Reuse the interpreter with Playwright available. The scaffold still launches from its demo root.
     definition['adapter'][0] = sys.executable
+    for variant in ('timeout', 'recovery'):
+        relative = Path('scenarios') / variant / 'scenario.json'
+        document = json.loads((fixture / f'{variant}.json').read_text())
+        document['demo'] = '../../demo.json'
+        (demo / relative).parent.mkdir()
+        (demo / relative).write_text(json.dumps(document))
+        definition['scenarios'].append(str(relative))
     manifest.write_text(json.dumps(definition))
     cli('validate', manifest)
     cli('register', manifest)
@@ -124,10 +131,14 @@ BrowserType.launch_persistent_context = inspect
                         stray = chrome.contexts[0].new_page()
                         _, drifted = expect('Route changed', 1)
                         assert drifted['primary'] == 'restore'
+                        assert drifted['can_previous']
+                        os.write(master, b'\x1b[18~')
+                        _, drifted = expect('Route changed', 0, after=drifted['generation'])
+                        assert drifted['reviewing'] and not drifted['can_previous']
                         os.write(master, next_key)
-                        assert expect('Route changed', 1)[1]['generation'] == drifted['generation']
+                        assert expect('Route changed', 0)[1]['generation'] == drifted['generation']
                         os.write(master, b'r')
-                        _, still_drifted = expect('Route changed', 1, after=drifted['generation'])
+                        _, still_drifted = expect('Route changed', 0, after=drifted['generation'])
                         stray.close()
                         page.bring_to_front()
                         page.locator('#searchInput').click()

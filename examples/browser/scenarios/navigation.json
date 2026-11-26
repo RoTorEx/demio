@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "id": "browser-navigation",
-  "name": "Wikipedia and Wikidata",
+  "name": "Ada Lovelace · Wikipedia and Wikidata",
   "type": "browser",
   "development_tokens": {"input": 2561851, "cached_input": 2536688, "output": 13255, "basis": "allocated"},
   "description": "Search for Ada Lovelace, follow the article's Wikidata link in a second tab, then return and close the walkthrough.",

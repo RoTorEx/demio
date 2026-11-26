@@ -23,21 +23,32 @@ struct PresenterFrame: Decodable {
     let generation: UInt64
     let primary: String?
     let canPrevious: Bool
+    let reviewing: Bool?
 
     enum CodingKeys: String, CodingKey {
-        case status, channel, step, title, say, wait, detail, generation, primary
+        case status, channel, step, title, say, wait, detail, generation, primary, reviewing
         case scenarioID = "scenario_id"
         case canPrevious = "can_previous"
     }
 
     var heading: String { "\(channel) (\(scenarioID))" }
-    var stepHeading: String { "\(title) (\(step.replacingOccurrences(of: "/", with: " of ")))" }
+    var stepHeading: String { "Step: \(title) (\(step.replacingOccurrences(of: "/", with: " of ")))" }
     var offRoute: Bool { status == "Route changed" || status == "Restoring route" }
+    var showsTranscript: Bool { !offRoute || reviewing == true }
     var statusLabel: String {
         switch status {
         case "Introduction": "Ready to start"
         case "Route changed": "Off route"
         default: status
+        }
+    }
+    var statusColor: NSColor {
+        switch status {
+        case "Ready", "Finished": .systemGreen
+        case "Preparing", "Working", "Waiting", "Checking route", "Restoring route": .systemBlue
+        case "Route changed", "Step failed", "Preparation failed", "Preview failed",
+             "Outcome unknown", "Session expired": .systemRed
+        default: .labelColor
         }
     }
 }
@@ -65,6 +76,8 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
     private let minimumFontSize: CGFloat = 9
     private let maximumFontSize: CGFloat = 48
     private let initialContentSize = NSSize(width: 360, height: 288)
+    private let titleFont = NSFont.systemFont(ofSize: 15, weight: .bold)
+    private let statusFont = NSFont.systemFont(ofSize: 12, weight: .semibold)
     var notes: NSPanel!
     var back: NSButton!
     var start: NSButton!
@@ -142,14 +155,14 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
                 .font: font, .foregroundColor: color, .paragraphStyle: paragraph,
             ]))
         }
-        append("Info\n", font: headingFont, color: frame.offRoute ? .systemRed : .labelColor, after: 4)
+        append("Info\n", font: headingFont, after: 4)
         if !frame.detail.isEmpty {
             append(frame.detail + "\n", font: infoFont)
         }
         if !frame.offRoute && !frame.wait.isEmpty {
             append("Wait: \(frame.wait)\n", font: infoFont, color: .systemRed)
         }
-        if !frame.offRoute && !frame.say.isEmpty {
+        if frame.showsTranscript && !frame.say.isEmpty {
             append("Transcript\n", font: headingFont, before: 12, after: 4)
             let narrationFont = NSFont.systemFont(ofSize: fontSize)
             let start = content.length
@@ -220,7 +233,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
     }
     func buildHelp() {
         let legend = NSTextField(wrappingLabelWithString: """
-        F7   Back to a completed step
+        F7   Back to the previous step
         F9   Forward when available
         Use Fn with F7/F9 if needed.
         """)
@@ -359,14 +372,14 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
         body.alignment = .centerX
         body.spacing = 6
         body.translatesAutoresizingMaskIntoConstraints = false
-        title.font = .systemFont(ofSize: 15, weight: .bold)
+        title.font = titleFont
         title.maximumNumberOfLines = 2
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         title.setContentHuggingPriority(.defaultLow, for: .horizontal)
         step.font = .systemFont(ofSize: 12, weight: .medium)
         step.maximumNumberOfLines = 2
         step.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        status.font = .systemFont(ofSize: 12, weight: .semibold)
+        status.font = statusFont
         status.lineBreakMode = .byTruncatingTail
         status.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let metadata = NSStackView(views: [step, status])
@@ -452,7 +465,9 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
               infoRange.lowerBound < transcriptRange.lowerBound,
               let initialFrame = frame,
               title.stringValue == "Native check (native1)",
-              step.stringValue == initialFrame.stepHeading, status.stringValue == initialFrame.statusLabel,
+              step.stringValue == initialFrame.stepHeading, status.stringValue == "Status: \(initialFrame.statusLabel)",
+              title.attributedStringValue.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor == .labelColor,
+              title.attributedStringValue.attribute(.foregroundColor, at: title.attributedStringValue.length - 1, effectiveRange: nil) as? NSColor == .secondaryLabelColor,
               attributes(at: "Info")?[.font] as? NSFont == .systemFont(ofSize: 12, weight: .bold),
               let transcriptStyle = attributes(at: "Transcript")?[.paragraphStyle] as? NSParagraphStyle,
               transcriptStyle.paragraphSpacingBefore >= 10,
@@ -580,14 +595,15 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
             refresh()
             content.layoutSubtreeIfNeeded()
             let offRoute = status == "Route changed" || status == "Restoring route"
-            let statusColor: NSColor = offRoute ? .systemRed : .labelColor
             guard back.isEnabled == canGoBack, start.isEnabled == (command == "start"), start.title == "Start",
                   stateButton.isEnabled == (command == "confirm" || command == "restore"),
                   stateButton.frame.size == stateSize, buttons.allSatisfy({ !$0.isHidden }),
                   next.isEnabled == (command == "next"), stop.isEnabled,
                   cue.string.contains("Updated narration") == !offRoute, cue.string.contains("Current step detail"),
-                  self.status.stringValue == frame?.statusLabel, self.status.textColor == statusColor,
-                  attributes(at: "Info")?[.foregroundColor] as? NSColor == statusColor,
+                  let frame, self.status.stringValue == "Status: \(frame.statusLabel)",
+                  self.status.attributedStringValue.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor == .labelColor,
+                  self.status.attributedStringValue.attribute(.foregroundColor, at: "Status: ".utf16.count, effectiveRange: nil) as? NSColor == frame.statusColor,
+                  attributes(at: "Info")?[.foregroundColor] as? NSColor == .labelColor,
                   offRoute || narrationSize() == fontSize,
                   notes.frame == retainedFrame else { exit(13) }
             if command == "start" {
@@ -641,11 +657,17 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
               let state = try? JSONDecoder().decode(PresenterFrame.self, from: data) else { return }
         let previous = frame
         let newStep = previous?.step != state.step || previous?.title != state.title
-        let newCue = newStep || previous?.say != state.say || previous?.offRoute != state.offRoute
+        let newCue = newStep || previous?.say != state.say || previous?.showsTranscript != state.showsTranscript
         last = data
         frame = state
         if previous?.channel != state.channel || previous?.scenarioID != state.scenarioID {
-            title.stringValue = state.heading
+            let heading = NSMutableAttributedString(string: "\(state.channel) ", attributes: [
+                .font: titleFont, .foregroundColor: NSColor.labelColor,
+            ])
+            heading.append(NSAttributedString(string: "(\(state.scenarioID))", attributes: [
+                .font: titleFont, .foregroundColor: NSColor.secondaryLabelColor,
+            ]))
+            title.attributedStringValue = heading
             title.toolTip = state.heading
             notes.title = state.heading
         }
@@ -654,8 +676,13 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPop
             step.toolTip = state.stepHeading
         }
         if previous?.status != state.status {
-            status.stringValue = state.statusLabel
-            status.textColor = state.offRoute ? .systemRed : .labelColor
+            let line = NSMutableAttributedString(string: "Status: ", attributes: [
+                .font: statusFont, .foregroundColor: NSColor.labelColor,
+            ])
+            line.append(NSAttributedString(string: state.statusLabel, attributes: [
+                .font: statusFont, .foregroundColor: state.statusColor,
+            ]))
+            status.attributedStringValue = line
         }
         if newCue || previous?.detail != state.detail || previous?.wait != state.wait {
             renderCue()

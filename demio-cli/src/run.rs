@@ -61,6 +61,7 @@ struct Display<'a> {
     generation: u64,
     primary: Option<&'static str>,
     can_previous: bool,
+    reviewing: bool,
 }
 /// Red marks a step's wait tip; `paint` restores the theme colour after it.
 const RED: &str = "\x1b[1;31m";
@@ -335,12 +336,22 @@ struct RouteCheck {
     intent: RouteIntent,
 }
 
+enum Previous {
+    Preview(usize),
+    Review(usize),
+}
+
 enum Phase {
     Introduction,
     Ready,
     CheckingRoute,
-    RouteChanged,
-    RestoringRoute,
+    // Review uses the displayed step number, with zero for the introduction.
+    RouteChanged {
+        review: Option<usize>,
+    },
+    RestoringRoute {
+        review: Option<usize>,
+    },
     Working(Work),
     Confirm {
         index: usize,
@@ -402,7 +413,7 @@ impl Presenter {
             Phase::Introduction => Some(Action::Start),
             Phase::Ready if self.position.next(total).is_some() => Some(Action::Next),
             Phase::Confirm { .. } => Some(Action::Confirm),
-            Phase::RouteChanged => Some(Action::Restore),
+            Phase::RouteChanged { .. } => Some(Action::Restore),
             _ => None,
         }
     }
@@ -411,8 +422,8 @@ impl Presenter {
         match self.phase {
             Phase::Introduction => "Introduction",
             Phase::CheckingRoute => "Checking route",
-            Phase::RouteChanged => "Route changed",
-            Phase::RestoringRoute => "Restoring route",
+            Phase::RouteChanged { .. } => "Route changed",
+            Phase::RestoringRoute { .. } => "Restoring route",
             Phase::Working(Work::Prepare) => "Preparing",
             Phase::Working(_) if self.waiting => "Waiting",
             Phase::Working(_) => "Working",
@@ -425,22 +436,33 @@ impl Presenter {
         }
     }
 
-    fn index(&self) -> Option<usize> {
+    fn route_review(&self) -> Option<usize> {
         match self.phase {
-            Phase::Ready | Phase::CheckingRoute | Phase::RouteChanged | Phase::RestoringRoute => {
-                self.position.view.or(Some(0))
-            }
+            Phase::RouteChanged { review } | Phase::RestoringRoute { review } => review,
+            _ => None,
+        }
+    }
+
+    fn index(&self) -> Option<usize> {
+        if let Some(step) = self.route_review() {
+            return step.checked_sub(1);
+        }
+        match self.phase {
+            Phase::Ready
+            | Phase::CheckingRoute
+            | Phase::RouteChanged { .. }
+            | Phase::RestoringRoute { .. } => self.position.view.or(Some(0)),
             Phase::Working(Work::Step { index, .. }) | Phase::Confirm { index, .. } => Some(index),
             Phase::Blocked { index, .. } => index,
             Phase::Introduction | Phase::Working(Work::Prepare) => None,
         }
     }
 
-    fn previous(&self) -> Option<usize> {
-        if matches!(self.phase, Phase::Ready) {
-            self.position.previous()
-        } else {
-            None
+    fn previous(&self) -> Option<Previous> {
+        match self.phase {
+            Phase::Ready => self.position.previous().map(Previous::Preview),
+            Phase::RouteChanged { .. } => self.index().map(Previous::Review),
+            _ => None,
         }
     }
 
@@ -467,6 +489,7 @@ impl Presenter {
             generation: self.generation,
             primary: self.primary(total).map(Action::name),
             can_previous: self.previous().is_some(),
+            reviewing: self.route_review().is_some(),
         }
     }
 
@@ -509,7 +532,11 @@ impl Presenter {
         intent: RouteIntent,
     ) {
         if matches!(intent, RouteIntent::Restore) {
-            self.change(Phase::RestoringRoute, "Checking the rehearsal view…");
+            let review = self.route_review();
+            self.change(
+                Phase::RestoringRoute { review },
+                "Checking the rehearsal view…",
+            );
         } else if !matches!(intent, RouteIntent::Monitor) {
             self.change(Phase::CheckingRoute, "Checking the rehearsal tab and page…");
         }
@@ -532,7 +559,8 @@ impl Presenter {
     }
 
     fn route_changed(&mut self, error: anyhow::Error) {
-        self.change(Phase::RouteChanged, error.to_string());
+        let review = self.route_review();
+        self.change(Phase::RouteChanged { review }, error.to_string());
     }
 
     fn finish_route_check(
@@ -938,11 +966,25 @@ pub fn run(
             }
             continue;
         }
-        if let (Some(Action::Previous), Some(index)) = (action, presenter.previous()) {
-            if let (Some(upcoming), Some(worker)) = (presenter.guarded_step(total), &worker) {
-                presenter.verify_route(&channel, worker, upcoming, RouteIntent::Preview(index));
-            } else {
-                presenter.step(&channel, worker.as_ref(), index, false);
+        if let (Some(Action::Previous), Some(previous)) = (action, presenter.previous()) {
+            match previous {
+                Previous::Review(step) => {
+                    presenter.phase = Phase::RouteChanged { review: Some(step) };
+                    presenter.generation += 1;
+                }
+                Previous::Preview(index) => {
+                    if let (Some(upcoming), Some(worker)) = (presenter.guarded_step(total), &worker)
+                    {
+                        presenter.verify_route(
+                            &channel,
+                            worker,
+                            upcoming,
+                            RouteIntent::Preview(index),
+                        );
+                    } else {
+                        presenter.step(&channel, worker.as_ref(), index, false);
+                    }
+                }
             }
             continue;
         }

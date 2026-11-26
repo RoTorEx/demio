@@ -131,8 +131,8 @@ introduction. **Start scenario** opens the adapter and prepares its windows and
 data. Once preparation succeeds the presenter shows the distinct first step.
 **Forward** starts that step. **Back**, **Start** and **Forward** stay on the
 first row. The fixed-size state button stays beside **Stop** on the second row.
-The scenario name and ID appear above the step and its position, such as
-**Introduction (0 of 6)**. The current status has its own line.
+The scenario name and a muted ID appear above **Step: Introduction (0 of 6)**
+and the separate **Status:** line.
 **Info** and **Transcript** wrap and scroll as the window resizes.
 The panel opens with a 360 × 288 pt content area and 12 pt body text by
 default. Use the gear to change the transcript size or alignment. Hover over
@@ -165,10 +165,11 @@ session for inspection and stopping. The panel displays the adapter's progress
 and error detail.
 
 The bundled Chrome rehearsals verify the expected view before each action.
-**Off route** and **Info** turn red on a detour. Follow the short instruction
-in **Info**, then select **Check route**. Back in Wikipedia search, the
-check repeats the search if its result is missing. A successful check brings
-back the transcript and enables **Forward** for the pending step.
+On a detour, **Off route** turns red and **Info** shows where to return.
+**Back** lets you review the previous cue, including the introduction.
+Select **Check route** after restoring the expected view. Back in Wikipedia
+search, the check repeats the search if its result is missing. A successful
+check returns to the pending step and enables **Forward**.
 The terminal shortcut is r. With terminal-only controls, the terminal may
 retain keyboard focus while the expected Chrome tab is visible.
 
@@ -194,9 +195,11 @@ Use `demio init` in a fresh directory to generate the reference rehearsals.
 Install Python 3.10 or later and Google Chrome in `/Applications`. Each rehearsal uses its own profile,
 fixed viewport, English locale and light appearance. Watch the mouse, typed
 search, real link clicks and wheel scrolling on Wikipedia, Wikidata and IANA.
-Try **Wikipedia and Wikidata** for a complete automatic walkthrough or
-**Wikipedia manual recovery** for the Work click and **Confirm** gate.
-**IANA download, timer and confirmation** verifies a published archive.
+Start with **Wikipedia · Grace Hopper** for search, opening a result, scrolling
+and closing. **Wikipedia · Katherine Johnson** follows a different article.
+**Ada Lovelace · Wikipedia and Wikidata** demonstrates a second tab.
+**IANA download, timer and confirmation** waits for and verifies a published
+archive.
 
 ```sh
 demio init ~/.toolbelt/demio/demos/my-demo
@@ -208,8 +211,8 @@ demio list
 demio
 ```
 
-The generated README describes each route, the intentional timeout and error,
-and the Mac file walkthrough. The latter uses the desktop by default and asks
+The generated README describes each route and the Mac file walkthrough.
+The Mac example uses the desktop by default and asks
 the presenter to confirm that both lines are visible in TextEdit. To choose
 a different destination, set `parameters.directory` in
 `scenarios/mac-file/scenario.json` to an existing writable folder.

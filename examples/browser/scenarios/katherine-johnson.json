@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "id": "browser-katherine-johnson",
+  "name": "Wikipedia · Katherine Johnson",
+  "type": "browser",
+  "development_tokens": {"input": 2236838, "cached_input": 2218476, "output": 11584, "basis": "allocated"},
+  "description": "Find Katherine Johnson on Wikipedia, read the article and close the window.",
+  "intro": "Welcome. We will find Katherine Johnson on Wikipedia and look through her article.",
+  "parameters": {"route": "article", "query": "Katherine Johnson"},
+  "steps": [
+    {
+      "id": "search",
+      "title": "Search for Katherine Johnson",
+      "role": "Presenter",
+      "say": "I type Katherine Johnson into the search field."
+    },
+    {
+      "id": "open-article",
+      "title": "Open the Katherine Johnson article",
+      "role": "Presenter",
+      "say": "I click the matching result and open the article."
+    },
+    {
+      "id": "read-article",
+      "title": "Scroll through the article",
+      "role": "Presenter",
+      "say": "I scroll down to read more of the article."
+    },
+    {
+      "id": "close",
+      "title": "Close the rehearsal window",
+      "role": "Presenter",
+      "say": "I close the window."
+    }
+  ]
+}

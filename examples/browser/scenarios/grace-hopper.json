@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "id": "browser-grace-hopper",
+  "name": "Wikipedia · Grace Hopper",
+  "type": "browser",
+  "development_tokens": {"input": 2236825, "cached_input": 2218471, "output": 11574, "basis": "allocated"},
+  "description": "Type Grace Hopper into Wikipedia, open the result, scroll and close the window.",
+  "intro": "Welcome. We will take a short tour of Grace Hopper's Wikipedia article.",
+  "parameters": {"route": "article", "query": "Grace Hopper"},
+  "steps": [
+    {
+      "id": "search",
+      "title": "Search for Grace Hopper",
+      "role": "Presenter",
+      "say": "I type Grace Hopper in Wikipedia's search field."
+    },
+    {
+      "id": "open-article",
+      "title": "Open the Grace Hopper article",
+      "role": "Presenter",
+      "say": "I click the matching search result."
+    },
+    {
+      "id": "read-article",
+      "title": "Scroll through the article",
+      "role": "Presenter",
+      "say": "I scroll down to read more of the article."
+    },
+    {
+      "id": "close",
+      "title": "Close the rehearsal window",
+      "role": "Presenter",
+      "say": "I close the window."
+    }
+  ]
+}
