@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Restore the original selector palette and date column. Use dark text on the
+  blue selection in Calm.
+
 ## [0.2.1] - 2026-11-26
 
 - Reverse the terminal's default colors for the selected row. Give scenario

@@ -94,17 +94,16 @@ fall back to filesystem creation time, which is an approximation for copied or
 checked-out files. Unavailable manifests use the last registered metadata snapshot.
 Metadata tests cover date order, edits, missing manifests, and summer/winter time.
 
-The selector shows grouped scenario names on the left and details on the right,
-even in narrow terminals. The list uses ` | ` between name segments. An ellipsis
-marks a clipped title. Wider terminals give extra space to the details pane.
-It shows the full title, description, step-zero cue and ordered steps with wait
-and confirmation cues. Stable ID, project, Warsaw creation date and time, source
-paths and session limit follow below.
+The selector shows grouped scenarios on the left and details on the right, even
+in narrow terminals. The list keeps the Warsaw creation year and a three-column
+gap between date and name. It uses ` | ` between name segments for display.
+Wider terminals give extra space to the details pane. It shows the full title,
+description, step-zero cue and ordered steps with wait and confirmation cues.
+Stable ID, project, creation time, source paths and session limit follow below.
 PageUp/PageDown scroll details. Unavailable scenarios place the error beside the
 title and refuse to open. An empty registry shows registration guidance.
-The selector uses the terminal's own text and background colors. The selection
-reverses that pair and shows a marker. Themes color pane borders and the scroll
-indicator. Headings use bold text to separate sections.
+Theme roles distinguish the two panes, headings, dates and the current selection.
+Calm uses dark text on its blue selection.
 Selection previews the manifest. Enter opens its presenter at step zero.
 Non-terminal output stays scriptable.
 The selector opens the selected manifest and owning demo root in VS Code with

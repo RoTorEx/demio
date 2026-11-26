@@ -98,12 +98,11 @@ before adapting it. Registration accepts demo.json (all declared scenarios) or a
 single scenario JSON. Run and doctor use a stable **scenario ID** printed by list.
 Legacy standalone manifests remain supported.
 
-The two-pane TUI shows grouped scenario names on the left. The right pane
-previews the full title, introduction, step order, wait and confirmation cues,
-then shows the creation date, source paths and settings. The selected row
-reverses the terminal's text and background colors. ↑/↓ or j/k changes selection.
-Enter opens the presenter at step zero, and d opens a dry rehearsal. PgUp/PgDn
-scrolls the right pane. Press e to open the demo root and scenario in VS Code, f to reveal
+The two-pane TUI shows grouped scenarios and creation dates on the left. The
+right pane previews the introduction, step order, wait and confirmation cues,
+then shows source paths and settings. ↑/↓ or j/k changes selection. Enter opens
+the presenter at step zero, and d opens a dry rehearsal. PgUp/PgDn scrolls the
+right pane. Press e to open the demo root and scenario in VS Code, f to reveal
 the scenario in Finder, or q/Esc to quit. Non-terminal output remains a plain
 list. `demio list --json` includes stable IDs and source paths.
 
