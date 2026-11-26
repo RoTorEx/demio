@@ -45,7 +45,10 @@ for line in sys.stdin:
     def start(rows=30, columns=140):
         master, slave = pty.openpty()
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', rows, columns, 0, 0))
-        process = subprocess.Popen([str(binary)], stdin=slave, stdout=slave, stderr=slave, env=env)
+        # Crossterm prefers the controlling terminal when measuring the window.
+        # Use the sized test PTY even when the release command runs in a terminal.
+        process = subprocess.Popen([str(binary)], stdin=slave, stdout=slave, stderr=slave,
+                                   env=env, start_new_session=True)
         os.close(slave)
         return process, master
     def wait_text(master, expected):
