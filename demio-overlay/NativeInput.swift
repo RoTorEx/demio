@@ -131,27 +131,28 @@ private struct ActiveWindow {
     }
 
     func closeTab(titled title: String) throws {
+        let tab = try find("The selected rehearsal tab") { element, role in
+            (role == "AXRadioButton" || role == "AXTab") &&
+                attribute(element, kAXSelectedAttribute) as? Bool == true &&
+                names(of: element).contains(where: {
+                    // Chrome can append a live memory-usage description to the tab title.
+                    $0 == title || $0.hasPrefix(title + " - ") || $0.hasPrefix(title + ", ")
+                })
+        }
         func closeButton() throws -> AXUIElement {
-            try find("Chrome tab close button") { element, role in
-                role == "AXButton" && names(of: element).contains("Close \(title)")
+            try find("Chrome tab close button", in: tab) { element, role in
+                role == "AXButton" && names(of: element).contains(where: {
+                    $0 == "Close \(title)" || $0 == "Close tab" || $0 == "Close"
+                })
             }
         }
         if let button = try? closeButton() {
             try click(button)
             return
         }
-        let tab = try find("The rehearsal tab") { element, role in
-            (role == "AXRadioButton" || role == "AXTab") &&
-                names(of: element).contains(where: { $0 == title || $0.hasPrefix(title + ", ") })
-        }
         try move(to: center(of: tab))
         Thread.sleep(forTimeInterval: 0.18)
-        let button = try find("Chrome tab close button", in: tab) { element, role in
-            role == "AXButton" && names(of: element).contains(where: {
-                $0 == "Close \(title)" || $0 == "Close tab" || $0 == "Close"
-            })
-        }
-        try click(button)
+        try click(closeButton())
     }
 
     func bounds(of element: AXUIElement) throws -> CGRect {
