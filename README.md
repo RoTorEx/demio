@@ -98,11 +98,12 @@ before adapting it. Registration accepts demo.json (all declared scenarios) or a
 single scenario JSON. Run and doctor use a stable **scenario ID** printed by list.
 Legacy standalone manifests remain supported.
 
-The two-pane TUI shows grouped scenarios and creation dates on the left. The
-right pane previews the introduction, step order, wait and confirmation cues,
-then shows source paths and settings. ↑/↓ or j/k changes selection. Enter opens
-the presenter at step zero, and d opens a dry rehearsal. PgUp/PgDn scrolls the
-right pane. Press e to open the demo root and scenario in VS Code, f to reveal
+The two-pane TUI shows grouped scenario names on the left. The right pane
+previews the full title, introduction, step order, wait and confirmation cues,
+then shows the creation date, source paths and settings. The selected row
+reverses the terminal's text and background colors. ↑/↓ or j/k changes selection.
+Enter opens the presenter at step zero, and d opens a dry rehearsal. PgUp/PgDn
+scrolls the right pane. Press e to open the demo root and scenario in VS Code, f to reveal
 the scenario in Finder, or q/Esc to quit. Non-terminal output remains a plain
 list. `demio list --json` includes stable IDs and source paths.
 
@@ -129,8 +130,10 @@ data. Once preparation succeeds the presenter shows the distinct first step.
 **Next** starts that step. The panel shows the current role, step, status and
 notes, which wrap and scroll as the window resizes.
 The panel opens with a 360 × 240 pt content area and 11 pt notes by default.
-Use **A− / A+** to change font size and **Left / Center / Right** for alignment.
-These preferences persist in the shared config.toml under `[overlay]`:
+Open **Settings** next to the scenario title to change the size or alignment of
+the **Read aloud** text. **Info** uses a fixed font for step titles,
+progress, and wait instructions. The shared config.toml stores these preferences
+under `[overlay]`.
 
 ```toml
 [overlay]
@@ -150,8 +153,8 @@ c confirms completion when offered, and q / Ctrl+C stops the session.
 **Stop** on the panel also ends the session. Use `--no-overlay` for terminal controls.
 
 Back and forward through completed steps show read-only previews. During
-preparation and waits, only Stop is available. **Confirm completion** accepts
-a verified manual step, including a step the adapter explicitly reported as
+preparation and waits, **Stop** is the available scenario action. **Confirm
+completion** accepts a verified manual step, including a step the adapter explicitly reported as
 failed. A timeout or invalid reply leaves the outcome unknown and locks the
 session for inspection and stopping. The panel displays the adapter's progress
 and error detail.
@@ -164,7 +167,8 @@ may open or focus read-only rehearsal views. Outside a terminal the command
 prints the introduction and script. `--auto` executes a live run directly and
 requires a scenario without manual confirmation steps.
 
-The window requests legacy capture exclusion (`NSWindow.sharingType = .none`).
+The presenter and its settings popover request legacy capture exclusion
+(`NSWindow.sharingType = .none`).
 For a recording with the presenter visible, select the demo application window
 or use a display recorder that explicitly excludes Demio. With region capture,
 place the panel outside the selected area. Check a short saved recording on the

@@ -94,15 +94,17 @@ fall back to filesystem creation time, which is an approximation for copied or
 checked-out files. Unavailable manifests use the last registered metadata snapshot.
 Metadata tests cover date order, edits, missing manifests, and summer/winter time.
 
-The selector shows grouped scenarios on the left and details on the right, even
-in narrow terminals. The list keeps the Warsaw creation year and a three-column
-gap between date and name. It uses ` | ` between name segments for display.
-Wider terminals give extra space to the details pane. It shows the full title,
-description, step-zero cue and ordered steps with wait and confirmation cues.
-Stable ID, project, creation time, source paths and session limit follow below.
+The selector shows grouped scenario names on the left and details on the right,
+even in narrow terminals. The list uses ` | ` between name segments. An ellipsis
+marks a clipped title. Wider terminals give extra space to the details pane.
+It shows the full title, description, step-zero cue and ordered steps with wait
+and confirmation cues. Stable ID, project, Warsaw creation date and time, source
+paths and session limit follow below.
 PageUp/PageDown scroll details. Unavailable scenarios place the error beside the
 title and refuse to open. An empty registry shows registration guidance.
-Theme roles distinguish the two panes, headings, dates and the current selection.
+The selector uses the terminal's own text and background colors. The selection
+reverses that pair and shows a marker. Themes color pane borders and the scroll
+indicator. Headings use bold text to separate sections.
 Selection previews the manifest. Enter opens its presenter at step zero.
 Non-terminal output stays scriptable.
 The selector opens the selected manifest and owning demo root in VS Code with
@@ -119,14 +121,16 @@ and the controls. Start scenario invokes the adapter and prepares the
 environment. Successful preparation shows the first executable step with its
 own narration. Next runs that step. A step contains its ID, title, role,
 narration text, operation timeout, and optional confirmation requirement.
-The presenter speaks; there is no synthesized audio. The presenter window
+The presenter reads the text marked **Read aloud**. The presenter window
 combines Back, the current action, Stop, and speaker notes in one movable,
 resizable panel. Controls and narration stay together when moving or resizing.
-A−/A+ changes notes font size by two points per click within 9–48 points.
+The gear beside the scenario title opens a settings popover. A−/A+ changes the
+spoken text size by two points per click within 9–48 points. Left, center, and
+right alignment apply to narration. Step titles, progress, and wait instructions
+remain left-aligned in the fixed-size **Info** section.
 The 11-point default is half the 0.1.10 default. The initial 360 × 240 point
 content area keeps the panel compact during a demo. Presenters can resize the
-panel or adjust the font, and longer notes wrap and scroll. Left, center, and
-right alignment apply to the full cue, including newly loaded steps. Font size
+panel or adjust the font, and longer notes wrap and scroll. Font size
 and alignment persist in the shared config.toml [overlay] table (font_size and
 alignment). The CLI owns TOML parsing,
 atomic writes and legacy JSON migration; the native window calls its sibling CLI
@@ -137,9 +141,9 @@ Valid legacy speaker-notes.json is imported once when [overlay] is absent, then
 removed after saving; an existing [overlay] takes precedence. Malformed legacy
 JSON is retained with a warning rather than discarded. Broken TOML blocks writes
 and preserves source files. Missing/invalid individual preferences use defaults;
-out-of-range sizes clamp to the range. Native smoke checks exercise controls,
-all alignments, resizing, and preference reload. Changing the range affects
-readability and control bounds.
+out-of-range sizes clamp to the range. Native smoke checks exercise both views,
+narration and info styles, all alignments, resizing, and preference reload.
+Changing the range affects readability and control bounds.
 Global F7/F9 are available while the helper is alive; there is no hide toggle.
 
 Next executes the next uncompleted step once. Back and forward navigation
@@ -193,10 +197,9 @@ Demio terminates that group and deletes its per-session runtime directory at exi
 A parent crash cannot guarantee cleanup of arbitrary external side effects.
 
 Presenter notes and controls should remain visible to the presenter and absent
-from the demo recording. The combined native panel requests the same legacy capture
-exclusion (`NSWindow.sharingType = .none`) as the original project-specific remote;
-the native smoke check protects this setting on the single window. Modern macOS
-ScreenCaptureKit recorders may ignore it, so the flag is not a universal guarantee.
+from the demo recording. The native panel and settings popover request legacy
+capture exclusion (`NSWindow.sharingType = .none`). The native smoke check verifies
+this setting on both windows. Modern macOS ScreenCaptureKit recorders may ignore it.
 Verify a short saved output with the actual recorder and macOS version. Where the
 flag is ignored, exclude Demio in the recorder or keep the panel outside the
 selected recording region. Screen recording itself, speech synthesis, a phone

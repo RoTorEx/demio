@@ -19,8 +19,12 @@ with tempfile.TemporaryDirectory(dir=base) as temporary:
                             text=True, capture_output=True, timeout=15,
                             env=dict(os.environ, DEMIO_CONFIG=str(root / 'config.toml'),
                                      DEMIO_HOME=temporary))
-    assert result.returncode == 0, (result.stdout, result.stderr)
+    assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)
     assert result.stdout.splitlines() == ['start 1', 'confirm 4', 'previous 9', 'next 9', 'quit']
+    if len(sys.argv) > 2:
+        shutil.copy2(root/'presenter.png', sys.argv[2])
+    if len(sys.argv) > 3:
+        shutil.copy2(root/'settings.png', sys.argv[3])
 
 with tempfile.TemporaryDirectory(dir=base) as temporary:
     root=Path(temporary)
@@ -28,13 +32,12 @@ with tempfile.TemporaryDirectory(dir=base) as temporary:
     (root/'speaker-notes.json').write_text('{"font_size":26,"alignment":"center"}')
     (root/'panel.json').write_text(json.dumps({'status':'Ready','channel':'Native check','step':'2/5','role':'Requester','title':'Read the speaker notes','say':'The presenter speaks. Notes and navigation move and resize together in one presenter window.','detail':'Ready','wait':'','generation':0,'primary':'next','can_previous':True}))
     result=subprocess.run([sys.argv[1],temporary,str(os.getpid()),'--smoke'],text=True,capture_output=True,timeout=15,env=dict(os.environ,DEMIO_CONFIG=str(root/'config.toml')))
-    assert result.returncode==0,(result.stdout,result.stderr)
+    assert result.returncode==0,(result.returncode,result.stdout,result.stderr)
     assert result.stdout.splitlines()==['start 1','confirm 4','previous 9','next 9','quit']
     assert (root/'presenter.png').is_file()
+    assert (root/'settings.png').is_file()
     text=(root/'config.toml').read_text()
     assert '# Native config preservation' in text and 'theme = "ocean"' in text and '[channels.existing]' in text
     assert '[overlay]' in text and 'font_size = 30.0' in text and 'alignment = "left"' in text
     assert not (root/'speaker-notes.json').exists()
-    if len(sys.argv) > 2:
-        shutil.copy2(root/'presenter.png', sys.argv[2])
     print(result.stderr.strip())
