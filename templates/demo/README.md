@@ -2,36 +2,24 @@
 
 This folder owns one demo. demo.json defines its shared identity, environment,
 adapter, parameters and scenario list. Each scenarios/<variant>/scenario.json
-owns a route, ordered steps, narration and parameter overrides. Both example
-scenarios reuse shared/adapter.py and shared/index.html.
+owns a route, introduction, ordered steps, narration and parameter overrides.
 
-## Brief to agree with the user
+## Rehearse
 
-- Audience and purpose: to be agreed.
-- Visible outcome: a local request is submitted, approved and verified.
-- Scenario variants: standard request and expedited request.
-- Shared components: local browser setup, request/approval actions and checks.
-- Per-scenario differences: input text and presenter narration.
-- Target: local browser example; no external writes or paid calls.
-- Presenter language and target duration: to be agreed.
-- Recording requirements: to be agreed; Demio does not record video.
+| Scenario | What to check |
+| --- | --- |
+| Wikipedia and Wikidata | Click Work in Wikipedia, open the related Wikidata entry in tab two, then select Biography in the original tab. Back revisits a completed view. |
+| IANA download, timer and confirmation | Open the published release, wait for the reading timer, then verify the data archive downloaded from IANA. Confirm and use Next to return to release history. |
+| Wikipedia late navigation and stop | Leave Biography open until Outcome unknown. Click Work on Wikipedia and observe that the presenter is still blocked. Use Stop. |
+| Wikipedia manual recovery | Open Work in Wikipedia's contents when the expected-section check fails. Verify the heading, confirm and continue. |
+| Mac file walkthrough | Create a unique text file in Terminal, append a line, and open the document in TextEdit. |
 
-The scaffold is a local example, not evidence of an approved product workflow.
-For a new real demo, follow AGENTS.md and agree the brief before implementation.
+The public routes need internet access. The Mac route defaults to `~/Desktop`.
+Set `parameters.directory` in `scenarios/mac-file/scenario.json` to choose an
+existing writable folder. macOS may request Automation access for Terminal. The
+finished document remains in the chosen folder.
 
-## Structure
-
-```text
-demo.json
-AGENTS.md
-README.md
-shared/
-  adapter.py
-  index.html
-scenarios/
-  request/scenario.json
-  expedited/scenario.json
-```
+For a product demo, follow AGENTS.md and retain its agreed brief here.
 
 Metadata and narration belong in scenario JSON; route/input differences belong
 in parameters. Clicks, account switching and visible-result checks belong in the
@@ -55,4 +43,6 @@ demio
 Run doctor for each scenario ID printed by list before rehearsing it. Registration
 stores source paths; later edits are loaded on the next run. Reopen the selector
 to refresh its metadata. e opens this demo root and the selected scenario in VS
-Code. f reveals the scenario in Finder. The terminal lists navigation controls.
+Code. f reveals the scenario in Finder. Select a scenario and read its step-zero
+introduction. Click **Start scenario** to prepare it, then **Next** for step one.
+Use **Stop** before Start to close an unused presenter.

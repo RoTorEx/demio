@@ -7,7 +7,7 @@ Work personally by default; use subagents only with the user's explicit permissi
 
 - A **demo** is this complete folder: one purpose, demo.json, instructions, shared
   environment, adapters, fixtures, and one or more scenarios.
-- A **scenario** is one route through the demo: its own stable ID, ordered steps,
+- A **scenario** is one route through the demo: its own stable ID, introduction, ordered steps,
   narration, role labels, description, parameters and creation timestamp. It
   references demo.json; it is not another copy of the application or adapter.
 - A **step** is one named action or view. Its ID must be implemented by the adapter.
@@ -66,15 +66,17 @@ an environment. A working doctor command is not proof that a demo succeeded.
 
 Run `demio`. Scenarios are grouped under their owning demo in the left pane;
 the right pane describes demo-wide components and the selected scenario.
-Arrow keys/j/k select; Enter starts the exact scenario; d starts a dry run. PgUp/PgDn scroll details
+Arrow keys/j/k select; Enter opens its presenter; d opens a dry rehearsal. PgUp/PgDn scroll details
 (on a MacBook, Fn+Up/Fn+Down). e opens the demo folder and selected JSON in VS Code;
 f reveals the scenario in Finder. q/Esc leaves the selector.
 
-During a demo, one floating window contains Back, Next and narration. The
-presenter reads aloud. F9 advances; F7 previews a completed step; after an error,
-F9 skips the failed step without running it again. Back is
-viewing, not undo. A dry run (`demio run ID --dry-run`, or d in the selector)
-walks the narration first and executes nothing. q/Ctrl+C in the terminal ends the session. Font size and
+Read the step-zero introduction before starting. **Start scenario** prepares
+the app and exposes the distinct first cue. Use F9 or Next to perform a step
+and F7 or Back to preview. A gated step needs **Confirm completion**. After an
+explicit failure, confirm only after checking the result manually. An unknown
+outcome locks the session for inspection. **Stop** or q/Ctrl+C ends the session.
+A dry run (`demio run ID --dry-run`, or d in the selector) walks the narration.
+Font size and
 alignment persist. Capture exclusion depends on the recorder: inspect a short
 saved recording on the actual Mac before promising that the notes are hidden.
 

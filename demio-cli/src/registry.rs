@@ -19,6 +19,8 @@ pub struct Step {
     /// What to wait for before pressing F9, and why. Shown in red; optional.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub wait: String,
+    #[serde(default)]
+    pub confirm: bool,
     #[serde(default = "step_timeout")]
     pub timeout_seconds: u64,
 }
@@ -45,6 +47,8 @@ pub struct Channel {
     pub project: String,
     #[serde(default)]
     pub description: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub intro: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<DateTime<FixedOffset>>,
     #[serde(default = "default_root")]
@@ -87,6 +91,9 @@ impl Channel {
         if self.steps.is_empty() {
             bail!("Channel must contain at least one step");
         }
+        if !self.intro.trim().is_empty() && self.intro.trim() == self.steps[0].say.trim() {
+            bail!("The scenario introduction must differ from the first step's narration");
+        }
         let mut ids = std::collections::HashSet::new();
         for step in &self.steps {
             validate_id(&step.id)?;
@@ -101,6 +108,14 @@ impl Channel {
             }
         }
         Ok(())
+    }
+    pub fn introduction(&self) -> &str {
+        for text in [&self.intro, &self.description] {
+            if !text.trim().is_empty() && text.trim() != self.steps[0].say.trim() {
+                return text;
+            }
+        }
+        "Introduce the scenario. Begin setup when you are ready."
     }
     pub fn project_name(&self, manifest: &Path) -> String {
         if !self.project.trim().is_empty() {

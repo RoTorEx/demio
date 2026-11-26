@@ -437,7 +437,7 @@ fn draw(
     }
     frame.render_widget(
         Paragraph::new(format!(
-            "↑/↓ or j/k Select · Enter Run · d Dry run · PgUp/PgDn Details · q/Esc Quit\ne VS Code · f Finder   {message}"
+            "↑/↓ or j/k Select · Enter Open · d Rehearse · PgUp/PgDn Details · q/Esc Quit\ne VS Code · f Finder   {message}"
         ))
         .style(Style::default().fg(Color::Gray)),
         regions[1],

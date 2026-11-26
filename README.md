@@ -92,16 +92,16 @@ demio list
 demio
 ```
 
-Init scaffolds two working browser scenarios, shared components, a brief and
-local agent instructions. Read those instructions and agree the real demo brief
+Init scaffolds browser and native Mac rehearsals, shared components and local
+agent instructions. Read those instructions and agree the real demo brief
 before adapting it. Registration accepts demo.json (all declared scenarios) or a
 single scenario JSON. Run and doctor use a stable **scenario ID** printed by list.
 Legacy standalone manifests remain supported.
 
 The two-pane TUI shows demo headers with their scenarios on the left and
 separate demo/scenario details on the right. Dates retain the year; names use
-` | `, with colors following GTD roles. ↑/↓ or j/k selects a scenario; Enter runs
-it; d starts a dry run; PgUp/PgDn scrolls details; e opens the owning demo root and selected scenario
+` | `, with colors following GTD roles. ↑/↓ or j/k selects a scenario. Enter opens
+its presenter and d opens a dry rehearsal. PgUp/PgDn scrolls details; e opens the owning demo root and selected scenario
 in VS Code; f reveals the scenario in Finder; q/Esc quits. Panes stay side by
 side. Non-terminal output remains a plain list; list --json includes demo
 identity and paths. Empty/unavailable states stay visible without running code.
@@ -123,9 +123,11 @@ See [Editing demos and scenarios](docs/scenarios.md) and the
 
 ## Controls and speaker notes
 
-One movable, resizable gray glass presenter window contains **Back**, **Next**,
-the current step, role, status, and the text you read aloud. Navigation stays in
-the same window as the notes. Long text scrolls and wraps as the window resizes.
+Selecting a scenario opens one movable presenter window on step **0**, the
+introduction. **Start scenario** opens the adapter and prepares its windows and
+data. Once preparation succeeds the presenter shows the distinct first step.
+**Next** starts that step. The panel shows the current role, step, status and
+notes, which wrap and scroll as the window resizes.
 The panel opens with a 360 × 240 pt content area and 11 pt notes by default.
 Use **A− / A+** to change font size and **Left / Center / Right** for alignment.
 These preferences persist in the shared config.toml under `[overlay]`:
@@ -142,26 +144,25 @@ migrate automatically on install or the next CLI/window launch. A pre-existing
 [overlay] section wins; the old JSON is removed only after a successful migration.
 Malformed legacy JSON is preserved with a warning for manual recovery.
 
-F9 advances; F7 previews the previous completed step. Depending on your keyboard
-settings, use Fn+F9 / Fn+F7. Only these keys and the window's buttons move through
-a run; Enter doesn't. In the terminal, q / Ctrl+C exits.
-There is no hide/show button or F1 toggle. Exit from the terminal to close the
-window and clean up the session. Use `--no-overlay` for terminal controls only.
+F9 advances and F7 previews the previous completed step. Depending on your
+keyboard settings, use Fn+F9 / Fn+F7. In the terminal, s starts preparation,
+c confirms completion when offered, and q / Ctrl+C stops the session.
+**Stop** on the panel also ends the session. Use `--no-overlay` for terminal controls.
 
-Back is a **view**, not undo. Moving forward through completed steps previews
-without repeating writes. Next is blocked while working. After an error the
-failed step stays on screen; do it by hand, then F9 or Next skips it without
-running it again.
-Timeouts report an unknown outcome and never trigger automatic retries.
+Back and forward through completed steps show read-only previews. During
+preparation and waits, only Stop is available. **Confirm completion** accepts
+a verified manual step, including a step the adapter explicitly reported as
+failed. A timeout or invalid reply leaves the outcome unknown and locks the
+session for inspection and stopping. The panel displays the adapter's progress
+and error detail.
 
 ### Dry run
 
-`demio run ID --dry-run` (or d in the selector) rehearses a scenario before the
-real run: F9/F7 move through every step's narration in the same window, and
-nothing is prepared or executed. If the adapter supports `rehearse`, it opens or
-focuses the windows each step uses, read-only; otherwise the dry run is
-narration only. Outside a terminal it prints the whole script. `--dry-run`
-cannot be combined with `--auto`.
+`demio run ID --dry-run` (or d in the selector) starts from the same introduction.
+After **Start scenario**, F9/F7 move through the cues. A supporting adapter
+may open or focus read-only rehearsal views. Outside a terminal the command
+prints the introduction and script. `--auto` executes a live run directly and
+requires a scenario without manual confirmation steps.
 
 The window requests legacy capture exclusion (`NSWindow.sharingType = .none`).
 For a recording with the presenter visible, select the demo application window
@@ -170,14 +171,13 @@ place the panel outside the selected area. Check a short saved recording on the
 recording Mac before the demo. Full-display recorders can include the panel even
 with the legacy flag set. [ScreenCaptureKit capture filters](https://developer.apple.com/documentation/screencapturekit/capturing-screen-content-in-macos)
 
-## Browser example
+## Rehearsals
 
-The browser walkthrough generated by `demio init` is the reference demo for
-checking a fresh Mac setup. The adapter serves its bundled page and opens an
-isolated browser profile with a fixed viewport, locale, and light appearance.
-The five steps show scrolling, paced field entry, role switching, submission,
-and the final Approved status. The example runs entirely on the local Mac.
-Create it in a fresh folder with the build you are checking.
+Use `demio init` in a fresh directory to generate the reference rehearsals. The
+browser adapter uses a new Chromium profile, a fixed viewport, English locale,
+and light appearance. The walkthroughs use live Wikipedia, Wikidata and IANA.
+The IANA route verifies a real download. The Wikipedia routes let you create
+the expected event by choosing a section of the article.
 
 ```sh
 demio init ~/.toolbelt/demio/demos/my-demo
@@ -189,6 +189,11 @@ demio register demo.json
 demio list
 demio
 ```
+
+The generated README describes each route, the intentional timeout and error,
+and the Mac file walkthrough. The latter uses the desktop by default. To choose
+a different destination, set `parameters.directory` in
+`scenarios/mac-file/scenario.json` to an existing writable folder.
 
 An agent can use the [adapter contract](docs/contracts/adapter.md) to prepare a
 workflow for any project. Preparation is project-specific: Demio does not infer

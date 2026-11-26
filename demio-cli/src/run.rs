@@ -1,5 +1,5 @@
 use crate::{
-    protocol::{Event, Worker},
+    protocol::{Event, Rejected, Worker},
     registry::{Channel, atomic_write},
 };
 use anyhow::{Context, Result, bail};
@@ -38,7 +38,7 @@ impl Position {
         }
     }
     pub fn previous(&self) -> Option<usize> {
-        self.view.map(|v| v.saturating_sub(1))
+        self.view.and_then(|view| view.checked_sub(1))
     }
     pub fn finish(&mut self, index: usize, execute: bool) {
         if execute {
@@ -57,6 +57,9 @@ struct Display<'a> {
     say: &'a str,
     wait: &'a str,
     detail: &'a str,
+    generation: u64,
+    primary: Option<&'static str>,
+    can_previous: bool,
 }
 /// Red marks a step's wait tip; `paint` restores the theme colour after it.
 const RED: &str = "\x1b[1;31m";
@@ -135,45 +138,22 @@ fn overlay(session: &Path, sender: mpsc::Sender<String>) -> Result<Overlay> {
     });
     Ok(Overlay(child))
 }
-fn journal(channel: &Channel, position: &Position, status: &str) -> Result<()> {
+fn journal(channel: &Channel, position: &Position, status: &str) {
     crate::usage::event(
         "scenario_progress",
         match status {
-            "Error" | "PreparationError" => "error",
+            "Error" | "PreparationError" | "Outcome unknown" | "Step failed" | "Preview failed" => {
+                "error"
+            }
             "Finished" => "success",
             "Stopped" => "canceled",
             _ => "observed",
         },
         serde_json::json!({"completed":position.completed,"total":channel.steps.len(),"status":status}),
     );
-    Ok(())
 }
 
-fn display(
-    channel: &Channel,
-    position: &Position,
-    active: Option<usize>,
-    status: &str,
-    detail: &str,
-    session: &Path,
-) -> Result<String> {
-    let index = active.or(position.view).unwrap_or(0);
-    let step = &channel.steps[index];
-    let display = Display {
-        status,
-        channel: &channel.name,
-        step: format!(
-            "{}/{}",
-            active.or(position.view).map_or(0, |v| v + 1),
-            channel.steps.len()
-        ),
-        title: &step.title,
-        role: &step.role,
-        say: &step.say,
-        wait: &step.wait,
-        detail,
-    };
-    atomic_write(&session.join("panel.json"), &serde_json::to_vec(&display)?)?;
+fn terminal_text(channel: &Channel, display: &Display) -> String {
     let wait = if display.wait.is_empty() {
         String::new()
     } else {
@@ -182,8 +162,19 @@ fn display(
             display.wait.replace('\n', "\r\n")
         )
     };
-    Ok(format!(
-        "Demio — {} [{}]\r\n\r\n{}  ·  {}  ·  {}\r\n{}\r\n\r\n{}\r\n\r\n{wait}{}\r\n\r\nF9  Next    F7  Previous view    q / Ctrl+C  Quit\r\nPrevious view never repeats or undoes a completed action.\r\n",
+    let primary = match display.primary {
+        Some("start") => "s  Start scenario    ",
+        Some("next") => "F9  Next    ",
+        Some("confirm") => "c  Confirm completion    ",
+        _ => "",
+    };
+    let back = if display.can_previous {
+        "F7  Previous view    "
+    } else {
+        ""
+    };
+    format!(
+        "Demio — {} [{}]\r\n\r\n{}  ·  {}  ·  {}\r\n{}\r\n\r\n{}\r\n\r\n{wait}{}\r\n\r\n{primary}{back}q / Ctrl+C  Stop\r\n",
         channel.name,
         channel.id,
         display.status,
@@ -191,8 +182,8 @@ fn display(
         display.role,
         display.title,
         display.say.replace('\n', "\r\n"),
-        detail
-    ))
+        display.detail.replace('\n', "\r\n")
+    )
 }
 fn paint(text: &str, theme: &str) -> Result<()> {
     let color = match theme {
@@ -219,184 +210,430 @@ pub fn doctor(channel: &Channel, manifest: &Path, cancelled: &AtomicBool) -> Res
     println!("Ready: {} [{}]", channel.name, channel.id);
     Ok(())
 }
-/// How long an adapter may take to answer the first rehearse before the dry run
-/// continues as narration only.
 const REHEARSE_PROBE_SECONDS: u64 = 30;
-/// The next navigation command: a terminal key, else what the presenter window sent.
-/// Each one is logged with its source (never narration) so an unexpected step can be traced.
-fn key_input(panel: Option<String>) -> Result<Option<String>> {
-    let mut input = panel;
-    let mut source = "panel";
-    if event::poll(Duration::from_millis(100))? {
-        if let TerminalEvent::Key(key) = event::read()? {
-            if key.kind == KeyEventKind::Press {
-                let typed = match key.code {
-                    // Only F9/F7 and the window's buttons navigate; a stray Enter must not.
-                    KeyCode::F(9) => Some("next"),
-                    KeyCode::F(7) => Some("previous"),
-                    KeyCode::Char('q') | KeyCode::Esc => Some("quit"),
-                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                        Some("quit")
-                    }
-                    _ => None,
-                };
-                if let Some(command) = typed {
-                    input = Some(command.into());
-                    source = "terminal";
-                }
-            }
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Action {
+    Start,
+    Next,
+    Previous,
+    Confirm,
+    Quit,
+}
+
+impl Action {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Start => "start",
+            Self::Next => "next",
+            Self::Previous => "previous",
+            Self::Confirm => "confirm",
+            Self::Quit => "quit",
         }
     }
-    if let Some(command) = &input {
+
+    fn from_panel(message: &str, generation: u64) -> Option<Self> {
+        if message == "quit" {
+            return Some(Self::Quit);
+        }
+        let (name, sent_generation) = message.split_once(' ')?;
+        if sent_generation.parse::<u64>().ok()? != generation {
+            return None;
+        }
+        match name {
+            "start" => Some(Self::Start),
+            "next" => Some(Self::Next),
+            "previous" => Some(Self::Previous),
+            "confirm" => Some(Self::Confirm),
+            _ => None,
+        }
+    }
+
+    fn from_terminal(event: TerminalEvent) -> Option<Self> {
+        let TerminalEvent::Key(key) = event else {
+            return None;
+        };
+        if key.kind != KeyEventKind::Press {
+            return None;
+        }
+        match key.code {
+            KeyCode::Char('q') | KeyCode::Esc => Some(Self::Quit),
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => Some(Self::Quit),
+            KeyCode::Char('s') => Some(Self::Start),
+            KeyCode::Char('c') => Some(Self::Confirm),
+            KeyCode::F(9) => Some(Self::Next),
+            KeyCode::F(7) => Some(Self::Previous),
+            _ => None,
+        }
+    }
+}
+
+fn read_action(receiver: &mpsc::Receiver<String>, generation: u64) -> Result<Option<Action>> {
+    let mut chosen = None;
+    for message in receiver.try_iter().take(64) {
+        match Action::from_panel(&message, generation) {
+            Some(Action::Quit) => chosen = Some((Action::Quit, "panel")),
+            Some(action) if chosen.is_none() => chosen = Some((action, "panel")),
+            _ => (),
+        }
+    }
+    let mut delay = if chosen.is_some() {
+        Duration::ZERO
+    } else {
+        Duration::from_millis(50)
+    };
+    for _ in 0..64 {
+        if !event::poll(delay)? {
+            break;
+        }
+        delay = Duration::ZERO;
+        match Action::from_terminal(event::read()?) {
+            Some(Action::Quit) => chosen = Some((Action::Quit, "terminal")),
+            Some(action) if chosen.is_none() => chosen = Some((action, "terminal")),
+            _ => (),
+        }
+    }
+    Ok(chosen.map(|(action, source)| {
         crate::usage::event(
             "navigation",
             "observed",
-            serde_json::json!({"command":command,"source":source}),
+            serde_json::json!({"command":action.name(),"source":source}),
         );
-    }
-    Ok(input)
+        action
+    }))
 }
-/// Walk a scenario's narration without preparing or running anything. The
-/// adapter, when it answers `rehearse`, may only open or focus windows.
-fn dry_run(
-    channel: Channel,
-    manifest: PathBuf,
-    theme: &str,
-    no_overlay: bool,
-    cancelled: Arc<AtomicBool>,
+
+#[derive(Clone, Copy)]
+enum Work {
+    Prepare,
+    Step { index: usize, execute: bool },
+}
+
+enum Phase {
+    Introduction,
+    Ready,
+    Working(Work),
+    Confirm {
+        index: usize,
+        recovery: bool,
+    },
+    Blocked {
+        index: Option<usize>,
+        status: &'static str,
+    },
+}
+
+struct Presenter {
+    phase: Phase,
+    position: Position,
+    detail: String,
+    dry: bool,
+    waiting: bool,
+    rehearsal_windows: bool,
+    generation: u64,
+    deadline: Option<Instant>,
+}
+
+impl Presenter {
+    fn new(dry: bool) -> Self {
+        Self {
+            phase: Phase::Introduction,
+            position: Position::default(),
+            detail: if dry {
+                "Start scenario opens the rehearsal. Steps will be read aloud only."
+            } else {
+                "Start scenario prepares the demo."
+            }
+            .into(),
+            dry,
+            waiting: false,
+            rehearsal_windows: false,
+            generation: 0,
+            deadline: None,
+        }
+    }
+
+    fn change(&mut self, phase: Phase, detail: impl Into<String>) {
+        self.phase = phase;
+        self.detail = detail.into();
+        self.waiting = false;
+        self.generation += 1;
+    }
+
+    fn primary(&self, total: usize) -> Option<Action> {
+        match self.phase {
+            Phase::Introduction => Some(Action::Start),
+            Phase::Ready if self.position.next(total).is_some() => Some(Action::Next),
+            Phase::Confirm { .. } => Some(Action::Confirm),
+            _ => None,
+        }
+    }
+
+    fn status(&self, total: usize) -> &'static str {
+        match self.phase {
+            Phase::Introduction => "Introduction",
+            Phase::Working(Work::Prepare) => "Preparing",
+            Phase::Working(_) if self.waiting => "Waiting",
+            Phase::Working(_) => "Working",
+            Phase::Confirm { recovery: true, .. } => "Step failed",
+            Phase::Confirm { .. } => "Awaiting confirmation",
+            Phase::Blocked { status, .. } => status,
+            Phase::Ready if self.position.completed == total => "Finished",
+            Phase::Ready if self.dry => "Dry run",
+            Phase::Ready => "Ready",
+        }
+    }
+
+    fn index(&self) -> Option<usize> {
+        match self.phase {
+            Phase::Ready => self.position.view.or(Some(0)),
+            Phase::Working(Work::Step { index, .. }) | Phase::Confirm { index, .. } => Some(index),
+            Phase::Blocked { index, .. } => index,
+            Phase::Introduction | Phase::Working(Work::Prepare) => None,
+        }
+    }
+
+    fn previous(&self) -> Option<usize> {
+        if matches!(self.phase, Phase::Ready) {
+            self.position.previous()
+        } else {
+            None
+        }
+    }
+
+    fn display<'a>(&'a self, channel: &'a Channel) -> Display<'a> {
+        let total = channel.steps.len();
+        let index = self.index();
+        let (title, role, say, wait) = match index {
+            Some(index) => {
+                let step = &channel.steps[index];
+                (&*step.title, &*step.role, &*step.say, &*step.wait)
+            }
+            None => ("Introduction", "Presenter", channel.introduction(), ""),
+        };
+        Display {
+            status: self.status(total),
+            channel: &channel.name,
+            step: format!("{}/{total}", index.map_or(0, |index| index + 1)),
+            title,
+            role,
+            say,
+            wait,
+            detail: &self.detail,
+            generation: self.generation,
+            primary: self.primary(total).map(Action::name),
+            can_previous: self.previous().is_some(),
+        }
+    }
+
+    fn ready(&mut self, total: usize) {
+        let detail = match (self.dry, self.position.completed) {
+            (true, count) if count == total && self.position.view == Some(total - 1) => {
+                "End of the scenario. Back previews earlier cues."
+            }
+            (true, _) if self.rehearsal_windows => "Dry run. Speak, then press F9.",
+            (true, _) => "Dry run, narration only. Speak, then press F9.",
+            (false, 0) => "Setup complete. Press F9 to run step 1.",
+            (false, count) if count == total => "Demo complete. Back previews completed steps.",
+            (false, _) => "Step complete. Speak, then press F9.",
+        };
+        self.change(Phase::Ready, detail);
+    }
+
+    fn blocked(&mut self, index: Option<usize>, status: &'static str, detail: impl Into<String>) {
+        self.deadline = None;
+        self.change(Phase::Blocked { index, status }, detail);
+    }
+
+    fn step(&mut self, channel: &Channel, worker: Option<&Worker>, index: usize, execute: bool) {
+        if self.dry && !self.rehearsal_windows {
+            self.position.finish(index, execute);
+            self.ready(channel.steps.len());
+            return;
+        }
+        let (operation, detail) = if self.dry {
+            ("rehearse", "Opening the rehearsal view…")
+        } else if execute {
+            ("run", "Executing step…")
+        } else {
+            ("preview", "Viewing completed step…")
+        };
+        let step = &channel.steps[index];
+        let result = worker
+            .context("Adapter unavailable")
+            .and_then(|worker| worker.send(operation, Some(&step.id), step.timeout_seconds));
+        match result {
+            Ok(()) => self.change(Phase::Working(Work::Step { index, execute }), detail),
+            Err(error) => self.blocked(Some(index), "Outcome unknown", error.to_string()),
+        }
+    }
+
+    fn finish_work(
+        &mut self,
+        channel: &Channel,
+        worker: &Worker,
+        work: Work,
+        result: Result<serde_json::Value>,
+    ) {
+        let total = channel.steps.len();
+        match (work, result) {
+            (Work::Prepare, result) if self.dry => {
+                self.rehearsal_windows = result.is_ok();
+                self.step(channel, Some(worker), 0, true);
+            }
+            (Work::Prepare, Ok(_)) => {
+                self.deadline = Some(Instant::now() + Duration::from_secs(channel.session_seconds));
+                self.ready(total);
+            }
+            (Work::Prepare, Err(error)) => {
+                self.blocked(None, "Preparation failed", format!("{error:#}"));
+                journal(channel, &self.position, "PreparationError");
+            }
+            (Work::Step { index, execute }, Err(error)) if self.dry => {
+                self.position.finish(index, execute);
+                self.rehearsal_windows = error.is::<Rejected>();
+                self.change(Phase::Ready, format!("Window not opened. {error:#}"));
+            }
+            (
+                Work::Step {
+                    index,
+                    execute: true,
+                },
+                Ok(_),
+            ) if !self.dry && channel.steps[index].confirm => {
+                self.change(
+                    Phase::Confirm {
+                        index,
+                        recovery: false,
+                    },
+                    "Check the required result, then confirm completion.",
+                );
+            }
+            (Work::Step { index, execute }, Ok(_)) => {
+                self.position.finish(index, execute);
+                self.ready(total);
+                if !self.dry {
+                    journal(channel, &self.position, self.status(total));
+                }
+            }
+            (
+                Work::Step {
+                    index,
+                    execute: true,
+                },
+                Err(error),
+            ) if error.is::<Rejected>() => {
+                self.change(
+                    Phase::Confirm {
+                        index,
+                        recovery: true,
+                    },
+                    format!(
+                        "{error:#}\nConfirm completion only after verifying the step manually."
+                    ),
+                );
+                journal(channel, &self.position, "Step failed");
+            }
+            (Work::Step { index, .. }, Err(error)) => {
+                let status = if error.is::<Rejected>() {
+                    "Preview failed"
+                } else {
+                    "Outcome unknown"
+                };
+                self.blocked(
+                    Some(index),
+                    status,
+                    format!("{error:#}\nStop and inspect the application."),
+                );
+                journal(channel, &self.position, self.status(total));
+            }
+        }
+    }
+}
+
+fn print_script(channel: &Channel) {
+    let total = channel.steps.len();
+    println!(
+        "Dry run: {} [{}]. Nothing is executed.\n\n0/{total}  Introduction\n{}\n",
+        channel.name,
+        channel.id,
+        channel.introduction()
+    );
+    for (index, step) in channel.steps.iter().enumerate() {
+        println!(
+            "{}/{}  {}  {}\n{}\n",
+            index + 1,
+            total,
+            step.role,
+            step.title,
+            step.say
+        );
+        if !step.wait.is_empty() {
+            println!("Wait: {}\n", step.wait);
+        }
+        if step.confirm {
+            println!("Presenter confirmation required in a live run.\n");
+        }
+    }
+}
+
+fn auto_run(
+    channel: &Channel,
+    manifest: &Path,
+    cancelled: &AtomicBool,
     operation: crate::usage::Operation,
 ) -> Result<()> {
-    let total = channel.steps.len();
-    if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
-        println!(
-            "Dry run: {} [{}]. Nothing is executed.\n",
-            channel.name, channel.id
-        );
+    if channel.steps.iter().any(|step| step.confirm) {
+        bail!("This scenario requires presenter confirmation. Run it interactively.");
+    }
+    let scratch = Scratch::new()?;
+    let worker = Worker::start(channel, manifest, &scratch.0)?;
+    let mut position = Position::default();
+    let mut prepared = false;
+    let result = (|| -> Result<()> {
+        println!("Preparing {} [{}]…", channel.name, channel.id);
+        worker.send("prepare", None, channel.steps[0].timeout_seconds)?;
+        worker.wait(cancelled)?;
+        prepared = true;
+        let deadline = Instant::now() + Duration::from_secs(channel.session_seconds);
         for (index, step) in channel.steps.iter().enumerate() {
+            if cancelled.load(Ordering::Relaxed) || Instant::now() >= deadline {
+                bail!("Session stopped before next step");
+            }
             println!(
-                "{}/{}  {}  {}\n{}\n",
+                "{}/{}  {}  {}\n{}",
                 index + 1,
-                total,
+                channel.steps.len(),
                 step.role,
                 step.title,
                 step.say
             );
-            if !step.wait.is_empty() {
-                println!("Wait: {}\n", step.wait);
-            }
+            worker.send("run", Some(&step.id), step.timeout_seconds)?;
+            worker.wait(cancelled)?;
+            position.finish(index, true);
+            journal(channel, &position, "Ready");
         }
-        operation.finish(
-            "success",
-            serde_json::json!({"completed":0,"total":total,"scenario_id":channel.id,"mode":"dry_run"}),
-        );
-        return Ok(());
-    }
-    let scratch = Scratch::new()?;
-    let worker = Worker::start(&channel, &manifest, &scratch.0).ok();
-    let mut windows = false;
-    if let Some(worker) = &worker {
-        println!("Opening windows for a dry run of {}…", channel.name);
-        worker.send("rehearse", None, REHEARSE_PROBE_SECONDS)?;
-        windows = worker.wait(&cancelled).is_ok();
-    }
-    let ready = "Dry run: nothing is executed. Speak, then press F9.";
-    let mut detail = if windows {
-        "Dry run: nothing is executed. Press F9 to begin."
+        Ok(())
+    })();
+    worker.cleanup();
+    let (status, outcome) = if result.is_ok() {
+        ("Finished", "success")
+    } else if cancelled.load(Ordering::Relaxed) {
+        ("Stopped", "canceled")
+    } else if !prepared {
+        ("PreparationError", "error")
     } else {
-        "Dry run, narration only: the adapter opened no windows. Press F9 to begin."
-    }
-    .to_owned();
-    let (input_tx, input_rx) = mpsc::channel();
-    let mut view: Option<usize> = None;
-    display(
-        &channel,
-        &Position::default(),
-        None,
-        "Dry run",
-        &detail,
-        &scratch.0,
-    )?;
-    let panel = if no_overlay {
-        None
-    } else {
-        Some(overlay(&scratch.0, input_tx)?)
+        ("Error", "error")
     };
-    let screen = Screen::enter()?;
-    let mut pending = false;
-    let mut drawn = String::new();
-    let mut furthest = 0;
-    loop {
-        if cancelled.load(Ordering::Relaxed) {
-            break;
-        }
-        if let Some(worker) = &worker {
-            while let Ok(event) = worker.events.try_recv() {
-                match event {
-                    Event::Progress(message) => detail = message,
-                    Event::Done(result) => {
-                        pending = false;
-                        detail = match result {
-                            Ok(_) => ready.into(),
-                            Err(error) => {
-                                format!("Window not opened: {error}. Nothing is executed.")
-                            }
-                        };
-                    }
-                }
-            }
-        }
-        let position = Position { completed: 0, view };
-        let text = display(&channel, &position, None, "Dry run", &detail, &scratch.0)?;
-        if text != drawn {
-            paint(&text, theme)?;
-            drawn = text;
-        }
-        let target = match key_input(input_rx.try_recv().ok())?.as_deref() {
-            Some("quit") => break,
-            Some("next") if !pending => match view.map_or(0, |v| v + 1) {
-                index if index < total => Some(index),
-                _ => {
-                    detail = "End of the scenario. F7 goes back; q quits.".into();
-                    None
-                }
-            },
-            Some("previous") if !pending => view.filter(|v| *v > 0).map(|v| v - 1),
-            _ => None,
-        };
-        if let Some(index) = target {
-            view = Some(index);
-            furthest = furthest.max(index + 1);
-            match &worker {
-                Some(worker) if windows => {
-                    worker.send(
-                        "rehearse",
-                        Some(&channel.steps[index].id),
-                        channel.steps[index].timeout_seconds,
-                    )?;
-                    pending = true;
-                    detail = "Opening windows…".into();
-                }
-                _ => detail = ready.into(),
-            }
-        }
-    }
-    drop(screen);
-    drop(panel);
-    if let Some(worker) = &worker {
-        worker.cleanup();
-    }
-    operation.finish(
-        if cancelled.load(Ordering::Relaxed) {
-            "canceled"
-        } else {
-            "success"
-        },
-        serde_json::json!({"completed":furthest,"total":total,"scenario_id":channel.id,"mode":"dry_run"}),
-    );
-    Ok(())
+    journal(channel, &position, status);
+    operation.finish(outcome, serde_json::json!({
+        "completed":position.completed,"total":channel.steps.len(),"scenario_id":channel.id,"mode":"auto"
+    }));
+    result
 }
+
 pub fn run(
-    channel: Channel,
+    mut channel: Channel,
     manifest: PathBuf,
     theme: &str,
     auto: bool,
@@ -405,202 +642,159 @@ pub fn run(
     cancelled: Arc<AtomicBool>,
 ) -> Result<()> {
     let operation = crate::usage::Operation::start("scenario_run");
-    let mut channel = channel;
     channel.name = channel.display_name(&manifest);
-    if dry {
-        return dry_run(channel, manifest, theme, no_overlay, cancelled, operation);
-    }
-    let scratch = Scratch::new()?;
-    let worker = Worker::start(&channel, &manifest, &scratch.0)?;
-    println!("Preparing {} [{}]…", channel.name, channel.id);
-    worker.send("prepare", None, channel.steps[0].timeout_seconds)?;
-    if let Err(error) = worker.wait(&cancelled) {
-        journal(&channel, &Position::default(), "PreparationError")?;
-        return Err(error);
-    }
-    let mut position = Position::default();
     if auto {
-        let deadline = Instant::now() + Duration::from_secs(channel.session_seconds);
-        let result = (|| -> Result<()> {
-            for (index, step) in channel.steps.iter().enumerate() {
-                if cancelled.load(Ordering::Relaxed) || Instant::now() >= deadline {
-                    bail!("Session stopped before next step");
-                }
-                println!(
-                    "{}/{}  {}  {}\n{}",
-                    index + 1,
-                    channel.steps.len(),
-                    step.role,
-                    step.title,
-                    step.say
-                );
-                worker.send("run", Some(&step.id), step.timeout_seconds)?;
-                worker.wait(&cancelled)?;
-                position.finish(index, true);
-                journal(&channel, &position, "Ready")?;
-            }
-            Ok(())
-        })();
-        worker.cleanup();
-        journal(
-            &channel,
-            &position,
-            if result.is_ok() { "Finished" } else { "Error" },
-        )?;
-        operation.finish(if result.is_ok(){"success"}else if cancelled.load(Ordering::Relaxed){"canceled"}else{"error"},serde_json::json!({"completed":position.completed,"total":channel.steps.len(),"scenario_id":channel.id,"mode":"auto"}));
-        return result;
+        return auto_run(&channel, &manifest, &cancelled, operation);
     }
+    let total = channel.steps.len();
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
-        worker.cleanup();
-        bail!("Interactive run requires a terminal; use --auto for an explicit scripted run");
+        if !dry {
+            bail!("Interactive run requires a terminal; use --auto for an explicit scripted run");
+        }
+        print_script(&channel);
+        operation.finish(
+            "success",
+            serde_json::json!({
+                "completed":0,"total":total,"scenario_id":channel.id,"mode":"dry_run"
+            }),
+        );
+        return Ok(());
     }
+
+    let scratch = Scratch::new()?;
+    let panel_path = scratch.0.join("panel.json");
+    let mut presenter = Presenter::new(dry);
+    let mut drawn = serde_json::to_vec(&presenter.display(&channel))?;
+    atomic_write(&panel_path, &drawn)?;
     let (input_tx, input_rx) = mpsc::channel();
-    display(
-        &channel,
-        &position,
-        None,
-        "Ready",
-        "Press F9 to begin",
-        &scratch.0,
-    )?;
     let panel = if no_overlay {
         None
     } else {
         Some(overlay(&scratch.0, input_tx)?)
     };
     let screen = Screen::enter()?;
-    let mut pending: Option<(usize, bool)> = None;
-    let mut failure = None;
-    // The step whose run failed. It stays on screen; F9 skips it once the presenter has done it by hand.
-    let mut failed: Option<usize> = None;
-    let mut detail = "Press F9 to begin".to_owned();
-    let mut drawn = String::new();
-    let deadline = Instant::now() + Duration::from_secs(channel.session_seconds);
-    loop {
-        if cancelled.load(Ordering::Relaxed) {
+    paint(
+        &terminal_text(&channel, &presenter.display(&channel)),
+        theme,
+    )?;
+    let mut worker = None;
+    while !cancelled.load(Ordering::Relaxed) {
+        let frame = presenter.display(&channel);
+        let encoded = serde_json::to_vec(&frame)?;
+        if encoded != drawn {
+            atomic_write(&panel_path, &encoded)?;
+            paint(&terminal_text(&channel, &frame), theme)?;
+            drawn = encoded;
+        }
+
+        // Consume input against the visible phase before applying a worker reply.
+        // A key pressed while waiting cannot advance the next step.
+        let action = read_action(&input_rx, presenter.generation)?;
+        if action == Some(Action::Quit) {
             break;
         }
-        if Instant::now() >= deadline {
-            failure = Some("Session time limit reached".to_owned());
-            break;
+        if presenter.deadline.is_some_and(|end| Instant::now() >= end) {
+            presenter.blocked(
+                presenter.index(),
+                "Session expired",
+                "The scenario reached its time limit. Stop and inspect the application.",
+            );
+            continue;
         }
-        while let Ok(event) = worker.events.try_recv() {
-            match event {
-                Event::Progress(message) => detail = message,
-                Event::Done(result) => {
-                    if let Some((index, execute)) = pending.take() {
-                        match result {
-                            Ok(_) => {
-                                position.finish(index, execute);
-                                detail = if position.completed == channel.steps.len() {
-                                    "Demo complete. Previous view is still available.".into()
-                                } else {
-                                    "Step complete. Speak, then press F9.".into()
-                                };
-                            }
-                            Err(error) => {
-                                failure = Some(error.to_string());
-                                if execute {
-                                    failed = Some(index);
-                                    detail = format!(
-                                        "{error}\r\nDo this step by hand, then press F9 to skip it; it won't run again. q stops."
-                                    );
-                                } else {
-                                    detail = error.to_string();
-                                }
-                            }
+        if action.is_some() && action == presenter.primary(total) {
+            match action {
+                Some(Action::Start) => {
+                    let (op, timeout) = if dry {
+                        ("rehearse", REHEARSE_PROBE_SECONDS)
+                    } else {
+                        ("prepare", channel.steps[0].timeout_seconds)
+                    };
+                    let started =
+                        Worker::start(&channel, &manifest, &scratch.0).and_then(|worker| {
+                            worker.send(op, None, timeout)?;
+                            Ok(worker)
+                        });
+                    match started {
+                        Ok(started) => {
+                            worker = Some(started);
+                            presenter.change(Phase::Working(Work::Prepare), "Preparing scenario…");
                         }
-                        journal(
-                            &channel,
-                            &position,
-                            if failure.is_some() { "Error" } else { "Ready" },
-                        )?;
+                        Err(_) if dry => presenter.step(&channel, None, 0, true),
+                        Err(error) => {
+                            presenter.blocked(None, "Preparation failed", format!("{error:#}"));
+                            journal(&channel, &presenter.position, "PreparationError");
+                        }
                     }
                 }
+                Some(Action::Next) => {
+                    if let Some((index, execute)) = presenter.position.next(total) {
+                        presenter.step(&channel, worker.as_ref(), index, execute);
+                    }
+                }
+                Some(Action::Confirm) => {
+                    if let Phase::Confirm { index, recovery } = presenter.phase {
+                        presenter.position.finish(index, true);
+                        presenter.ready(total);
+                        journal(
+                            &channel,
+                            &presenter.position,
+                            if recovery { "Recovered" } else { "Confirmed" },
+                        );
+                    }
+                }
+                _ => (),
             }
+            continue;
         }
-        let status = if failure.is_some() {
-            "Error"
-        } else if pending.is_some() {
-            "Working"
-        } else {
-            "Ready"
-        };
-        let text = display(
-            &channel,
-            &position,
-            pending.map(|v| v.0).or(failed),
-            status,
-            &detail,
-            &scratch.0,
-        )?;
-        if text != drawn {
-            paint(&text, theme)?;
-            drawn = text;
+        if let (Some(Action::Previous), Some(index)) = (action, presenter.previous()) {
+            presenter.step(&channel, worker.as_ref(), index, false);
+            continue;
         }
-        let input = key_input(input_rx.try_recv().ok())?;
-        match input.as_deref() {
-            Some("quit") => break,
-            Some("next") if pending.is_none() && failed.is_some() => {
-                if let Some(index) = failed.take() {
-                    position.finish(index, true);
-                    failure = None;
-                    detail = if position.completed == channel.steps.len() {
-                        "Skipped the failed step without running it again. Demo complete.".into()
-                    } else {
-                        "Skipped the failed step without running it again. Speak, then press F9."
-                            .into()
-                    };
-                    journal(&channel, &position, "Skipped")?;
+        if let Some(worker) = &worker {
+            while let Ok(event) = worker.events.try_recv() {
+                let Phase::Working(work) = presenter.phase else {
+                    continue;
+                };
+                match event {
+                    Event::Progress { detail, waiting } => {
+                        presenter.detail = detail;
+                        presenter.waiting = waiting;
+                    }
+                    Event::Done(result) => presenter.finish_work(&channel, worker, work, result),
                 }
             }
-            Some("next") if pending.is_none() && failure.is_none() => {
-                if let Some((index, execute)) = position.next(channel.steps.len()) {
-                    worker.send(
-                        if execute { "run" } else { "preview" },
-                        Some(&channel.steps[index].id),
-                        channel.steps[index].timeout_seconds,
-                    )?;
-                    pending = Some((index, execute));
-                    detail = if execute {
-                        "Executing step…".into()
-                    } else {
-                        "Viewing completed step…".into()
-                    };
-                }
-            }
-            Some("previous") if pending.is_none() && failure.is_none() => {
-                if let Some(index) = position.previous() {
-                    worker.send(
-                        "preview",
-                        Some(&channel.steps[index].id),
-                        channel.steps[index].timeout_seconds,
-                    )?;
-                    pending = Some((index, false));
-                    detail = "Viewing completed step…".into();
-                }
-            }
-            _ => (),
         }
     }
     drop(screen);
     drop(panel);
-    worker.cleanup();
-    journal(
-        &channel,
-        &position,
-        if failure.is_some() {
-            "Error"
-        } else {
-            "Stopped"
-        },
-    )?;
-    operation.finish(if failure.is_some(){"error"}else if position.completed==channel.steps.len(){"success"}else{"canceled"},serde_json::json!({"completed":position.completed,"total":channel.steps.len(),"scenario_id":channel.id,"mode":"interactive"}));
-    if let Some(error) = failure {
-        bail!("{error}");
+    if let Some(worker) = worker {
+        worker.cleanup();
+    }
+    let failed = matches!(
+        presenter.phase,
+        Phase::Blocked { .. } | Phase::Confirm { recovery: true, .. }
+    );
+    let (status, outcome) = if failed {
+        ("Error", "error")
+    } else if presenter.position.completed == total {
+        ("Finished", "success")
+    } else {
+        ("Stopped", "canceled")
+    };
+    journal(&channel, &presenter.position, status);
+    operation.finish(
+        outcome,
+        serde_json::json!({
+            "completed":presenter.position.completed,"total":total,"scenario_id":channel.id,
+            "mode":if dry {"dry_run"} else {"interactive"}
+        }),
+    );
+    if failed {
+        bail!("{}", presenter.detail);
     }
     Ok(())
 }
+
 #[cfg(test)]
 mod tests {
     use super::Position;

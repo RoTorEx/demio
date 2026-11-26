@@ -10,24 +10,26 @@ base=Path.home()/'construction_side/demio/checks';base.mkdir(parents=True,exist_
 with tempfile.TemporaryDirectory(dir=base) as temporary:
     root = Path(temporary)
     (root / 'panel.json').write_text(json.dumps({
-        'status': 'Ready', 'channel': 'Native check', 'step': '1/5', 'role': 'Requester',
-        'title': 'Start the demo', 'say': 'This rehearsal uses the compact presenter defaults.',
+        'status': 'Introduction', 'channel': 'Native check', 'step': '0/5', 'role': 'Presenter',
+        'title': 'Introduction', 'say': 'This rehearsal uses the compact presenter defaults.',
+        'detail': 'Start scenario prepares the demo.', 'wait': '', 'generation': 0,
+        'primary': 'start', 'can_previous': False,
     }))
     result = subprocess.run([sys.argv[1], temporary, str(os.getpid()), '--smoke'],
                             text=True, capture_output=True, timeout=15,
                             env=dict(os.environ, DEMIO_CONFIG=str(root / 'config.toml'),
                                      DEMIO_HOME=temporary))
     assert result.returncode == 0, (result.stdout, result.stderr)
-    assert result.stdout.splitlines() == ['previous', 'next']
+    assert result.stdout.splitlines() == ['start 1', 'confirm 4', 'previous 9', 'next 9', 'quit']
 
 with tempfile.TemporaryDirectory(dir=base) as temporary:
     root=Path(temporary)
     (root/'config.toml').write_text('# Native config preservation\ntheme = "ocean"\n\n[channels.existing]\nname = "Example"\nmanifest = "/missing/scenario.json"\n')
     (root/'speaker-notes.json').write_text('{"font_size":26,"alignment":"center"}')
-    (root/'panel.json').write_text(json.dumps({'status':'Ready','channel':'Native check','step':'2/5','role':'Requester','title':'Read the speaker notes','say':'The presenter speaks. Notes and navigation move and resize together in one presenter window.','detail':'Ready'}))
+    (root/'panel.json').write_text(json.dumps({'status':'Ready','channel':'Native check','step':'2/5','role':'Requester','title':'Read the speaker notes','say':'The presenter speaks. Notes and navigation move and resize together in one presenter window.','detail':'Ready','wait':'','generation':0,'primary':'next','can_previous':True}))
     result=subprocess.run([sys.argv[1],temporary,str(os.getpid()),'--smoke'],text=True,capture_output=True,timeout=15,env=dict(os.environ,DEMIO_CONFIG=str(root/'config.toml')))
     assert result.returncode==0,(result.stdout,result.stderr)
-    assert result.stdout.splitlines()==['previous','next']
+    assert result.stdout.splitlines()==['start 1','confirm 4','previous 9','next 9','quit']
     assert (root/'presenter.png').is_file()
     text=(root/'config.toml').read_text()
     assert '# Native config preservation' in text and 'theme = "ocean"' in text and '[channels.existing]' in text

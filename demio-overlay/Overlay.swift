@@ -10,6 +10,26 @@ guard CommandLine.arguments.count >= 3 else { exit(2) }
 let session = URL(fileURLWithPath: CommandLine.arguments[1])
 let owner = Int32(CommandLine.arguments[2]) ?? 0
 func send(_ command: String) { print(command); fflush(stdout) }
+
+struct PresenterFrame: Decodable {
+    let status: String
+    let channel: String
+    let step: String
+    let title: String
+    let role: String
+    let say: String
+    let wait: String
+    let detail: String
+    let generation: UInt64
+    let primary: String?
+    let canPrevious: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case status, channel, step, title, role, say, wait, detail, generation, primary
+        case canPrevious = "can_previous"
+    }
+}
+
 final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private static let defaultFontSize: CGFloat = 11
     private let minimumFontSize: CGFloat = 9
@@ -18,7 +38,9 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var notes: NSPanel!
     var back: NSButton!
     var waitRange: NSRange?
-    var next: NSButton!
+    var primary: NSButton!
+    var stop: NSButton!
+    var frame: PresenterFrame?
     let cue = NSTextView()
     let title = NSTextField(labelWithString: "Ready")
     var last = Data()
@@ -109,12 +131,17 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
         notes.contentMinSize = NSSize(width: 320, height: 200)
         let row = NSStackView()
         row.orientation = .horizontal
-        row.distribution = .fillEqually
+        row.distribution = .fill
         row.spacing = 10
         back = NSButton(title: "← Back", target: self, action: #selector(previous))
-        next = NSButton(title: "Next →", target: self, action: #selector(forward))
-        back.bezelStyle = .rounded; next.bezelStyle = .rounded
-        row.addArrangedSubview(back); row.addArrangedSubview(next)
+        primary = NSButton(title: "Start scenario", target: self, action: #selector(performPrimary))
+        stop = NSButton(title: "Stop", target: self, action: #selector(stopScenario))
+        for button in [back!, primary!, stop!] {
+            button.bezelStyle = .rounded
+            row.addArrangedSubview(button)
+        }
+        back.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        stop.setContentHuggingPriority(.defaultHigh, for: .horizontal)
         let body = NSStackView()
         body.orientation = .vertical
         body.alignment = .leading
@@ -149,7 +176,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
         for view in [smaller!, fontLabel, larger!, alignmentPicker!] { controls.addArrangedSubview(view) }
         // With macOS keyboard navigation on, the first button (Back) would hold focus and Space would
         // send the presenter back a step. Only clicks and F7/F9 may navigate.
-        for control in [back!, next!, smaller!, larger!, alignmentPicker!] as [NSControl] { control.refusesFirstResponder = true }
+        for control in [back!, primary!, stop!, smaller!, larger!, alignmentPicker!] as [NSControl] { control.refusesFirstResponder = true }
         body.addArrangedSubview(title); body.addArrangedSubview(controls); body.addArrangedSubview(scroll); body.addArrangedSubview(row)
         notes.contentView!.addSubview(body)
         NSLayoutConstraint.activate([body.leadingAnchor.constraint(equalTo: notes.contentView!.leadingAnchor, constant: 15), body.trailingAnchor.constraint(equalTo: notes.contentView!.trailingAnchor, constant: -15), body.topAnchor.constraint(equalTo: notes.contentView!.topAnchor, constant: 12), body.bottomAnchor.constraint(equalTo: notes.contentView!.bottomAnchor, constant: -12), scroll.widthAnchor.constraint(equalTo: body.widthAnchor), row.widthAnchor.constraint(equalTo: body.widthAnchor), scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 60)])
@@ -164,7 +191,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func smoke() {
         guard notes.sharingType == .none else { exit(11) }
         guard NSApp.windows.filter({ $0.isVisible }).count == 1,
-              back.window === notes, next.window === notes, cue.window === notes,
+              back.window === notes, primary.window === notes, stop.window === notes, cue.window === notes,
               notes.contentView?.bounds.size == initialContentSize, cue.font?.pointSize == fontSize,
               notes.styleMask.contains(.resizable), !cue.string.isEmpty else { exit(3) }
         let original = notes.frame
@@ -174,7 +201,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
         notes.setContentSize(notes.contentMinSize)
         notes.contentView?.layoutSubtreeIfNeeded()
         guard let content = notes.contentView else { exit(12) }
-        for control in [back!, next!, smaller!, larger!, alignmentPicker!] as [NSControl] {
+        for control in [back!, primary!, stop!, smaller!, larger!, alignmentPicker!] as [NSControl] {
             let rect = control.convert(control.bounds, to: content)
             guard content.bounds.contains(rect), rect.width > 0, rect.height > 0 else { exit(12) }
         }
@@ -199,24 +226,38 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard fontSize == 30, textAlignment == .right else { exit(8) }
         alignmentPicker.selectedSegment = 0; changeAlignment()
         let retainedFrame = notes.frame
-        for status in ["Working", "Failed", "Error", "Ready", "Dry run"] {
-            let state = ["status": status, "channel": "Native check", "step": "3/5", "role": "Approver", "title": "Updated step", "say": "Updated narration stays with the controls."]
+        let states: [(String, String?, Bool)] = [
+            ("Introduction", "start", false), ("Preparing", nil, false), ("Waiting", nil, false),
+            ("Awaiting confirmation", "confirm", false), ("Step failed", "confirm", false),
+            ("Outcome unknown", nil, false), ("Ready", "next", true), ("Finished", nil, true),
+        ]
+        for (index, (status, command, canGoBack)) in states.enumerated() {
+            var state: [String: Any] = ["status": status, "channel": "Native check", "step": "3/5",
+                "role": "Approver", "title": "Updated step", "say": "Updated narration stays with the controls.",
+                "detail": "Current step detail", "wait": "", "generation": index + 1, "can_previous": canGoBack]
+            if let command { state["primary"] = command }
             guard let data = try? JSONSerialization.data(withJSONObject: state) else { exit(13) }
             do { try data.write(to: session.appendingPathComponent("panel.json")) } catch { exit(13) }
             refresh()
-            let idle = status == "Ready" || status == "Dry run"
-            guard back.isEnabled == idle, next.isEnabled == (idle || status == "Error"),
-                  cue.string.contains("Updated narration"), cue.font?.pointSize == fontSize,
+            guard back.isEnabled == canGoBack, primary.isEnabled == (command != nil), stop.isEnabled,
+                  cue.string.contains("Updated narration"), cue.string.contains("Current step detail"),
+                  cue.font?.pointSize == fontSize,
                   notes.frame == retainedFrame else { exit(13) }
+            if command == "start" || status == "Awaiting confirmation" {
+                forward()
+                primary.performClick(nil)
+            }
         }
-        guard [back!, next!, smaller!, larger!, alignmentPicker!].allSatisfy({ $0.refusesFirstResponder }) else { exit(14) }
-        let tipState = ["status": "Ready", "channel": "Native check", "step": "4/5", "role": "Presenter", "title": "Tip", "say": "Narration.", "wait": "Copilot's reply"]
+        guard [back!, primary!, stop!, smaller!, larger!, alignmentPicker!].allSatisfy({ $0.refusesFirstResponder }) else { exit(14) }
+        let tipState: [String: Any] = ["status": "Ready", "channel": "Native check", "step": "4/5",
+            "role": "Presenter", "title": "Tip", "say": "Narration.", "wait": "Copilot's reply",
+            "detail": "", "generation": 9, "primary": "next", "can_previous": true]
         guard let tipData = try? JSONSerialization.data(withJSONObject: tipState) else { exit(15) }
         do { try tipData.write(to: session.appendingPathComponent("panel.json")) } catch { exit(15) }
         refresh()
         guard let tip = waitRange, cue.string.hasSuffix("Wait: Copilot's reply"),
               cue.textStorage?.attribute(.foregroundColor, at: tip.location, effectiveRange: nil) as? NSColor == NSColor.systemRed else { exit(15) }
-        back.performClick(nil); next.performClick(nil)
+        back.performClick(nil); primary.performClick(nil); stop.performClick(nil)
         for (name, window) in [("presenter", notes!)] {
             if let view = window.contentView, let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
                 view.cacheDisplay(in: view.bounds, to: bitmap)
@@ -228,19 +269,28 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
         fputs("Native UI: one compact panel with sharing disabled, navigation controls, move/resize, font size, alignment and saved preferences passed.\n", stderr)
         NSApp.terminate(nil)
     }
-    @objc func previous() { send("previous") }
-    @objc func forward() { send("next") }
+    @objc func previous() {
+        if let frame, frame.canPrevious { send("previous \(frame.generation)") }
+    }
+    @objc func performPrimary() {
+        if let frame, let command = frame.primary { send("\(command) \(frame.generation)") }
+    }
+    @objc func stopScenario() { send("quit") }
+    func forward() {
+        if frame?.primary == "next" { performPrimary() }
+    }
     func refresh() {
         if getppid() != owner { NSApp.terminate(nil); return }
         guard let data = try? Data(contentsOf: session.appendingPathComponent("panel.json")), data != last,
-              let state = (try? JSONSerialization.jsonObject(with: data)) as? [String: String] else { return }
+              let state = try? JSONDecoder().decode(PresenterFrame.self, from: data) else { return }
         last = data
-        title.stringValue = "\(state["status"] ?? "Ready") · \(state["step"] ?? "") · \(state["role"] ?? "")"
-        notes.title = "Demio · \(state["channel"] ?? "Speaker notes")"
-        var content = "\(state["title"] ?? "")\n\n\(state["say"] ?? "")"
+        frame = state
+        title.stringValue = "\(state.status) · \(state.step) · \(state.role)"
+        notes.title = "Demio · \(state.channel)"
+        var content = [state.detail, state.title, state.say].filter { !$0.isEmpty }.joined(separator: "\n\n")
         waitRange = nil
-        if let wait = state["wait"], !wait.isEmpty {
-            let tip = "Wait: \(wait)"
+        if !state.wait.isEmpty {
+            let tip = "Wait: \(state.wait)"
             content += "\n\n"
             waitRange = NSRange(location: (content as NSString).length, length: (tip as NSString).length)
             content += tip
@@ -250,11 +300,13 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate {
             applyTextStyle()
             cue.scrollRangeToVisible(NSRange(location: 0, length: 0))
         }
-        // Ignore repeated button presses while an operation is in flight. A dry run never has one.
-        let idle = ["Ready", "Dry run"].contains(state["status"] ?? "")
-        back.isEnabled = idle
-        // After an error, Next skips the failed step once the presenter has done it by hand.
-        next.isEnabled = idle || state["status"] == "Error"
+        back.isEnabled = state.canPrevious
+        primary.isEnabled = state.primary != nil
+        switch state.primary {
+        case "start": primary.title = "Start scenario"
+        case "confirm": primary.title = "Confirm completion"
+        default: primary.title = "Next →"
+        }
     }
     func installKeys() {
         let callback: EventHandlerUPP = { _, event, pointer in

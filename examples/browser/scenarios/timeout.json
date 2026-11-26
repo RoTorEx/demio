@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "browser-timeout",
+  "name": "Wikipedia late navigation and stop",
+  "description": "Wait for a real article section to open and inspect what happens when the browser event arrives after its deadline.",
+  "intro": "Welcome. This scenario shows what the presenter sees after a browser wait expires.",
+  "parameters": {
+    "route": "timeout"
+  },
+  "steps": [
+    {
+      "id": "biography",
+      "title": "Open Biography",
+      "role": "Presenter",
+      "say": "I open Biography from the article's contents."
+    },
+    {
+      "id": "await-work",
+      "title": "Wait for Work to open",
+      "role": "Presenter",
+      "say": "Leave Biography open for five seconds. After Outcome unknown, select Work in Wikipedia's contents, then choose Stop.",
+      "timeout_seconds": 5
+    },
+    {
+      "id": "read-work",
+      "title": "Read the Work section",
+      "role": "Presenter",
+      "say": "This step follows a verified navigation to Work within the deadline."
+    }
+  ]
+}

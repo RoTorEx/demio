@@ -16,9 +16,21 @@ use std::{
 };
 
 pub enum Event {
-    Progress(String),
+    Progress { detail: String, waiting: bool },
     Done(Result<Value>),
 }
+
+#[derive(Debug)]
+pub struct Rejected(String);
+
+impl std::fmt::Display for Rejected {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for Rejected {}
+
 pub struct Operation {
     pub op: String,
     pub step: Option<String>,
@@ -61,28 +73,28 @@ impl Adapter {
             }
             match reply.get("event").and_then(Value::as_str) {
                 Some("status") => {
-                    let _ = events.send(Event::Progress(
-                        reply
+                    let _ = events.send(Event::Progress {
+                        detail: reply
                             .get("detail")
                             .and_then(Value::as_str)
                             .unwrap_or("Working")
                             .chars()
                             .take(500)
                             .collect(),
-                    ));
+                        waiting: reply.get("waiting").and_then(Value::as_bool) == Some(true),
+                    });
                 }
-                Some("done") => {
-                    if reply.get("ok").and_then(Value::as_bool) != Some(true) {
-                        bail!(
-                            "{}",
-                            reply
-                                .get("error")
-                                .and_then(Value::as_str)
-                                .unwrap_or("Adapter reported failure; outcome is unknown")
-                        );
+                Some("done") => match reply.get("ok").and_then(Value::as_bool) {
+                    Some(true) => return Ok(reply),
+                    Some(false) => {
+                        let error = reply
+                            .get("error")
+                            .and_then(Value::as_str)
+                            .unwrap_or("Adapter reported a failure");
+                        return Err(Rejected(error.into()).into());
                     }
-                    return Ok(reply);
-                }
+                    None => bail!("Adapter done event must include a boolean ok"),
+                },
                 _ => bail!("Adapter event must be status or done"),
             }
         }
@@ -169,7 +181,7 @@ impl Worker {
             }
             match self.events.recv_timeout(Duration::from_millis(100)) {
                 Ok(Event::Done(result)) => return result,
-                Ok(Event::Progress(detail)) => eprintln!("{detail}"),
+                Ok(Event::Progress { detail, .. }) => eprintln!("{detail}"),
                 Err(mpsc::RecvTimeoutError::Timeout) => (),
                 Err(error) => return Err(error.into()),
             }

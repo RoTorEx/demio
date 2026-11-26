@@ -26,7 +26,9 @@ for line in sys.stdin:
  r=json.loads(line)
  with Path("actions.log").open("a") as stream: stream.write(r["op"]+":"+str(r["step"])+"\\n")
  if r["op"]=="run" and r["step"]=="fail": print(json.dumps({"id":r["id"],"event":"done","ok":False,"error":"intentional failure"}),flush=True)
- elif r["op"]=="run" and r["step"]=="timeout": time.sleep(3)
+ elif r["op"]=="run" and r["step"]=="timeout":
+  time.sleep(3)
+  print(json.dumps({"id":r["id"],"event":"done","ok":True}),flush=True)
  elif r["op"]=="run" and r["step"]=="wrong": print(json.dumps({"id":999,"event":"done","ok":True}),flush=True)
  else: print(json.dumps({"id":r["id"],"event":"done","ok":True}),flush=True)
  if r["op"]=="cleanup": break
@@ -99,7 +101,11 @@ for line in sys.stdin:
                 if expected.encode() in received: return
         raise AssertionError((expected,received))
     try:
-        wait_text('Press F9 to begin')
+        wait_text('Start scenario prepares the demo.')
+        os.write(master,b'\r\x1b[20~');time.sleep(.3)
+        assert not (root/'actions.log').read_text()
+        os.write(master,b's');wait_text('Setup complete.')
+        assert (root/'actions.log').read_text().splitlines() == ['prepare:None']
         os.write(master,b'\x1b[20~');wait_text('Step complete.')
         os.write(master,b'\x1b[20~');wait_text('Demo complete.')
         os.write(master,b'\x1b[18~');wait_text('Viewing completed step')
@@ -128,9 +134,9 @@ for line in sys.stdin:
     interactive = subprocess.Popen([binary,'run','z-demo','--dry-run','--no-overlay'],stdin=slave,stdout=slave,stderr=slave,env=dict(env,TERM='xterm-256color'))
     os.close(slave)
     try:
-        wait_text('Press F9 to begin')
-        os.write(master,b'\x1b[20~');wait_text('Speak, then press F9')
-        os.write(master,b'\x1b[20~');wait_text('Speak, then press F9')
+        wait_text('opens the rehearsal.')
+        assert not (root/'actions.log').read_text()
+        os.write(master,b's');wait_text('Speak, then press F9')
         os.write(master,b'\x1b[20~');wait_text('End of the scenario')
         os.write(master,b'\x1b[18~');wait_text('1/2')
         os.write(master,b'q');interactive.wait(timeout=5)
@@ -140,23 +146,71 @@ for line in sys.stdin:
     finally:
         if interactive.poll() is None: interactive.kill();interactive.wait()
         os.close(master)
-    # Enter no longer advances; after a failed step, F9 skips it without running it again.
+    # A reported failure requires explicit manual completion and never repeats the write.
     cli('register',str(manifest('skip',['fail','after'])))
     (root/'actions.log').write_text('')
     master, slave = pty.openpty()
     interactive = subprocess.Popen([binary,'run','skip','--no-overlay'],stdin=slave,stdout=slave,stderr=slave,env=dict(env,TERM='xterm-256color'))
     os.close(slave)
     try:
-        wait_text('Press F9 to begin')
+        wait_text('Start scenario prepares the demo.')
         os.write(master,b'\r');time.sleep(.5)
         assert (root/'actions.log').read_text().count('run:')==0,'Enter must not advance a run'
-        os.write(master,b'\x1b[20~');wait_text('press F9 to skip it')
-        os.write(master,b'\x1b[20~');wait_text('Skipped the failed step')
+        os.write(master,b's');wait_text('Setup complete.')
+        os.write(master,b'\x1b[20~');wait_text('Confirm completion only after')
+        os.write(master,b'\x1b[20~\x1b[20~');time.sleep(.3)
+        assert 'run:after' not in (root/'actions.log').read_text()
+        os.write(master,b'c');wait_text('Step complete.')
         os.write(master,b'\x1b[20~');wait_text('Demo complete.')
         os.write(master,b'q');interactive.wait(timeout=5)
         assert interactive.returncode==0
         actions=(root/'actions.log').read_text()
         assert actions.count('run:fail')==1 and actions.count('run:after')==1,actions
+    finally:
+        if interactive.poll() is None: interactive.kill();interactive.wait()
+        os.close(master)
+    # Confirmation is distinct from Next and is rejected before scripted preparation.
+    gated = manifest('gated', ['one','two'])
+    data = json.loads(gated.read_text())
+    data['intro'] = 'The rehearsal introduction.'
+    data['steps'][0]['confirm'] = True
+    gated.write_text(json.dumps(data))
+    cli('register', str(gated))
+    (root/'actions.log').write_text('')
+    assert 'requires presenter confirmation' in cli('run','gated','--auto',ok=False).stderr
+    assert 'requires a terminal' in cli('run','z-demo',ok=False).stderr
+    assert not (root/'actions.log').read_text()
+    master, slave = pty.openpty()
+    interactive = subprocess.Popen([binary,'run','gated','--no-overlay'],stdin=slave,stdout=slave,stderr=slave,env=dict(env,TERM='xterm-256color'))
+    os.close(slave)
+    try:
+        wait_text('The rehearsal introduction.')
+        assert not (root/'actions.log').read_text()
+        os.write(master,b's');wait_text('Setup complete.')
+        os.write(master,b'\x1b[20~');wait_text('Awaiting confirmation')
+        os.write(master,b'\x1b[20~');time.sleep(.3)
+        assert 'run:two' not in (root/'actions.log').read_text()
+        os.write(master,b'c');wait_text('Step complete.')
+        assert 'run:two' not in (root/'actions.log').read_text()
+        os.write(master,b'\x1b[20~');wait_text('Demo complete.')
+        os.write(master,b'q');assert interactive.wait(timeout=5)==0
+    finally:
+        if interactive.poll() is None: interactive.kill();interactive.wait()
+        os.close(master)
+
+    timed = manifest('timed', ['timeout', 'never'])
+    cli('register', str(timed))
+    (root/'actions.log').write_text('')
+    master, slave = pty.openpty()
+    interactive = subprocess.Popen([binary,'run','timed','--no-overlay'],stdin=slave,stdout=slave,stderr=slave,env=env)
+    os.close(slave)
+    try:
+        wait_text('Start scenario prepares the demo.')
+        os.write(master,b's');wait_text('Setup complete.')
+        os.write(master,b'\x1b[20~\x1b[20~');wait_text('Outcome unknown')
+        os.write(master,b'c\x1b[20~\x1b[20~');time.sleep(2.5)
+        assert 'run:never' not in (root/'actions.log').read_text()
+        os.write(master,b'q');assert interactive.wait(timeout=5)!=0
     finally:
         if interactive.poll() is None: interactive.kill();interactive.wait()
         os.close(master)
@@ -182,7 +236,7 @@ for line in sys.stdin:
     duplicate=manifest('duplicate',['same','same']);cli('validate',str(duplicate),ok=False)
     cli('unregister','z-demo');assert alternate.exists()
     cli('init',str(root/'example'));cli('validate',str(root/'example/demo.json'))
-    example=json.loads((root/'example/scenarios/request/scenario.json').read_text());assert example['created_at'] and example['demo']=='../../demo.json' and example['description']
+    example=json.loads((root/'example/scenarios/navigation/scenario.json').read_text());assert example['created_at'] and example['demo']=='../../demo.json' and example['description']
     assert (root/'example/AGENTS.md').is_file() and (root/'example/README.md').is_file()
     cli('register',str(root/'example/demo.json'))
     cli('init',str(root/'example'),ok=False)

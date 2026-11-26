@@ -70,8 +70,12 @@ manifest with explicit --replace. Standalone legacy manifests remain readable.
 Their metadata snapshots and demo membership remain visible when files become
 unavailable. One missing sibling does not invalidate a runnable scenario.
 
-The scaffold creates a demo, two parameterized scenarios, one shared adapter and
-page, and local authoring instructions. Generated demo/scenario IDs use six
+The scaffold creates browser and native Mac rehearsals with local authoring
+instructions. The browser cases use public Wikipedia, Wikidata and IANA
+pages with a fresh browser environment. The tab rehearsal uses an ordered
+pair of page handles. The Mac rehearsal creates one uniquely
+named document in the selected folder, which defaults to the desktop. A
+completed document remains available in TextEdit. Generated demo/scenario IDs use six
 alphanumeric characters. The authoring agent must explain terminology and
 controls, discuss audience/outcome/environment/allowed effects, propose a brief
 and agree unresolved product choices with the user before implementing behavior.
@@ -117,9 +121,13 @@ Ordering the channel list never changes identity. Manifests remain owned by thei
 requires an explicit flag when it changes the source file. Removing registration
 preserves source data.
 
-A step contains its ID, title, role, narration text, and operation timeout.
+A scenario's introduction is the step-zero cue. Selecting it exposes that cue
+and the controls. Start scenario invokes the adapter and prepares the
+environment. Successful preparation shows the first executable step with its
+own narration. Next runs that step. A step contains its ID, title, role,
+narration text, operation timeout, and optional confirmation requirement.
 The presenter speaks; there is no synthesized audio. The presenter window
-combines Back, Next, and speaker notes in one movable,
+combines Back, the current action, Stop, and speaker notes in one movable,
 resizable panel. Controls and narration stay together when moving or resizing.
 A−/A+ changes notes font size by two points per click within 9–48 points.
 The 11-point default is half the 0.1.10 default. The initial 360 × 240 point
@@ -141,21 +149,21 @@ all alignments, resizing, and preference reload. Changing the range affects
 readability and control bounds.
 Global F7/F9 are available while the helper is alive; there is no hide toggle.
 
-Next executes the next uncompleted step once. Back and forward navigation through
-completed steps invoke read-only preview. They neither undo nor repeat writes.
-An adapter error stops automatic progress: the failed step stays on screen with
-its error, and only the presenter's F9 or Next skips it, without running it again,
-after doing it by hand. Only F9/F7 and the window's buttons navigate. Timeouts leave outcomes
-unknown, with no automatic retry. A new run is a new environment, not a resume.
-Project adapters must make preparation safe for repeated fresh runs.
+Next executes the next uncompleted step once. Back and forward navigation
+through completed steps invoke read-only preview. The adapter can report
+progress and waiting detail. Next is blocked while the adapter is working or
+waiting. Confirm completion accepts an explicitly gated step, or a reported
+failure after the presenter has verified completion manually. The presenter then
+advances with a separate Next. Timeout, lost transport and invalid replies lock
+the session with unknown outcome for inspection and stopping. Each new run
+creates a fresh environment. Adapters must make preparation safe for fresh runs.
 
-A dry run lets the presenter learn the narration before a real run without
-changing anything. It never sends `prepare`, `run` or `preview`. Demio asks the
-adapter to `rehearse` once (30 seconds, long enough for a browser to open) and
+A dry run lets the presenter learn the narration before a real run. After Start,
+Demio asks the adapter to `rehearse` once (30 seconds, long enough for a browser to open) and
 then per step; an adapter that refuses or times out leaves the dry run as
-narration only, and a failed step rehearse is shown, not fatal. F9 and F7 move
-freely in both directions because nothing is completed. A dry run and `--auto`
-are mutually exclusive.
+narration only. F9 and F7 move through cues. A printed rehearsal opens no adapter.
+`--auto` deliberately starts the live adapter immediately and requires a scenario
+without manual confirmation steps.
 
 ## Limits and ownership
 
@@ -163,13 +171,14 @@ The first minor supports macOS 14+ Apple Silicon, matching the owner's machine;
 changing targets requires native build and install verification. The Rust core
 uses a Swift/AppKit helper for native controls. Adapter languages are unrestricted.
 No API keys, account defaults, or paid budgets are provided by the remote.
-The bundled example is local and incurs no model spend.
+The bundled rehearsals incur no model spend. Browser demos read live public
+pages and verify the downloaded IANA archive inside the session directory.
 
 Defaults: 7,200 seconds per interactive session (two-hour rehearsal), 120 seconds
 per operation (normal browser operations plus load margin). Manifest limits are
 1–86,400 session seconds and 1–3,600 operation seconds, permitting long rehearsals
 while rejecting zero/unbounded waits. Session time begins after preparation.
-An in-flight interactive operation is stopped when the session expires; scripted
+Interactive navigation is locked when the session expires; scripted
 `--auto` checks the session deadline between operations and uses operation limits
 while waiting. Preparation uses the first step's timeout. Cleanup has a two-second
 grace before the owned process group is terminated. These are local operational

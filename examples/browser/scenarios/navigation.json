@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "id": "browser-navigation",
+  "name": "Wikipedia and Wikidata",
+  "description": "Open two public pages in a fixed tab order, then return to the original article.",
+  "intro": "Welcome. We will follow the same subject across two public sites and revisit a tab we already opened.",
+  "parameters": {
+    "route": "navigation",
+    "pages": [
+      {
+        "url": "https://en.wikipedia.org/wiki/Ada_Lovelace",
+        "heading": "Ada Lovelace"
+      },
+      {
+        "url": "https://www.wikidata.org/wiki/Q7259",
+        "heading": "Ada Lovelace"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "id": "article",
+      "title": "Open Work in the Wikipedia article",
+      "role": "Presenter",
+      "say": "I use the article's table of contents to open Work in the first tab."
+    },
+    {
+      "id": "data",
+      "title": "Open the Wikidata entry",
+      "role": "Presenter",
+      "say": "The second tab opens the structured data entry for the same subject."
+    },
+    {
+      "id": "return",
+      "title": "Return to the original article",
+      "role": "Presenter",
+      "say": "I select Biography in the first tab. Both tabs remain open in their original order."
+    }
+  ]
+}

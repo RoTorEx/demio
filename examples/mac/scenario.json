@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "mac-file-walkthrough",
+  "name": "Mac file walkthrough",
+  "description": "Create a unique text file in Terminal, append a line, and open the verified file in TextEdit.",
+  "intro": "Welcome. This Mac rehearsal shows a small file moving from Terminal to a visible document window.",
+  "adapter": ["python3", "-u", "shared/mac_file.py"],
+  "parameters": {"directory": "~/Desktop"},
+  "steps": [
+    {"id": "create", "title": "Create a sample file in Terminal", "role": "Presenter", "say": "I write the first line of a new text file in the selected folder."},
+    {"id": "append", "title": "Append and print a second line", "role": "Presenter", "say": "I add a second line and print the complete file in Terminal."},
+    {"id": "open", "title": "Open the file in TextEdit", "role": "Presenter", "say": "I open the resulting document and read both lines in TextEdit."}
+  ]
+}

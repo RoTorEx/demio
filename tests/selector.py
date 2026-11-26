@@ -103,7 +103,10 @@ for line in sys.stdin:
         fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack('HHHH', 24, 80, 0, 0))
         process.send_signal(signal.SIGWINCH)
         os.write(master, b'\x1b[6~\x1b[5~j\r')
-        wait_text(master, 'Press F9 to begin')
+        wait_text(master, 'Start scenario prepares the demo.')
+        assert not (root/'actions.log').exists(), 'Selecting a scenario must leave its adapter dormant'
+        os.write(master, b's')
+        wait_text(master, 'Setup complete.')
         os.write(master, b'\x1b[20~')
         wait_text(master, 'Demo complete.')
         os.write(master, b'q')

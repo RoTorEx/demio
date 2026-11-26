@@ -17,7 +17,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
 };
-const HELP: &str = "Demio — one remote for project demos\n\nUsage: demio [COMMAND]\n\n  list [--json]                 List demos/scenarios and creation times\n  register FILE [--replace]      Register a demo or scenario manifest\n  unregister ID                 Remove registry entry, preserve project files\n  validate FILE                 Validate demo/scenario without executing code\n  doctor ID                     Ask adapter for a read-only readiness check\n  run ID [--no-overlay] [--auto|--dry-run]  Run by exact scenario ID\n                                --dry-run: narration only, nothing executed\n  init DIRECTORY                Scaffold a demo, scenarios and instructions\n  setup-config                  Create missing configuration\n  config                        Print configuration and path\n  themes                        List themes\n  theme NAME                    Set terminal theme\n  update                        Install latest verified release\n  help / --help                 Show this help\n  version / --version           Show version\n\nWithout a command: select a scenario interactively (list outside a terminal);\nEnter runs it, d starts a dry run.\nF9: next (skips a failed step you did by hand); F7: previous view; q / Ctrl+C: stop.\n";
+const HELP: &str = "Demio — one remote for project demos\n\nUsage: demio [COMMAND]\n\n  list [--json]                 List demos/scenarios and creation times\n  register FILE [--replace]      Register a demo or scenario manifest\n  unregister ID                 Remove registry entry, preserve project files\n  validate FILE                 Validate demo/scenario without executing code\n  doctor ID                     Ask adapter for a read-only readiness check\n  run ID [--no-overlay] [--auto|--dry-run]  Run by exact scenario ID\n                                --dry-run: narration only, nothing executed\n  init DIRECTORY                Scaffold a demo, scenarios and instructions\n  setup-config                  Create missing configuration\n  config                        Print configuration and path\n  themes                        List themes\n  theme NAME                    Set terminal theme\n  update                        Install latest verified release\n  help / --help                 Show this help\n  version / --version           Show version\n\nWithout a command: select a scenario interactively (list outside a terminal);\nEnter opens the presenter and d opens a rehearsal.\ns  Start scenario    F9  Next    F7  Previous view\nc  Confirm completion    q / Ctrl+C  Stop\n";
 fn main() {
     if let Ok(home) = registry::product_home() {
         usage::init("demio", home.join("logs/demio.jsonl"));
@@ -272,61 +272,78 @@ fn scaffold(path: &Path) -> Result<()> {
             .map(|byte| alphabet[*byte as usize % alphabet.len()] as char)
             .collect())
     }
-    for folder in ["shared", "scenarios/request", "scenarios/expedited"] {
-        fs::create_dir_all(path.join(folder))?;
-    }
+    let templates = [
+        (
+            "navigation",
+            include_str!("../../examples/browser/scenarios/navigation.json"),
+        ),
+        (
+            "waiting",
+            include_str!("../../examples/browser/scenarios/waiting.json"),
+        ),
+        (
+            "timeout",
+            include_str!("../../examples/browser/scenarios/timeout.json"),
+        ),
+        (
+            "recovery",
+            include_str!("../../examples/browser/scenarios/recovery.json"),
+        ),
+        ("mac-file", include_str!("../../examples/mac/scenario.json")),
+    ];
+    fs::create_dir_all(path.join("shared"))?;
+    let mut ids = std::collections::HashSet::new();
+    let mut scenarios = Vec::new();
     let demo_id = id()?;
-    let first_id = id()?;
-    let mut second_id = id()?;
-    while second_id == first_id {
-        second_id = id()?;
+    ids.insert(demo_id.clone());
+    for (variant, template) in templates {
+        let mut identity = id()?;
+        while !ids.insert(identity.clone()) {
+            identity = id()?;
+        }
+        let mut scenario: serde_json::Value = serde_json::from_str(template)?;
+        scenario["id"] = identity.into();
+        scenario["demo"] = "../../demo.json".into();
+        scenario["created_at"] = serde_json::to_value(registry::now())?;
+        let folder = format!("scenarios/{variant}");
+        fs::create_dir_all(path.join(&folder))?;
+        let relative = format!("{folder}/scenario.json");
+        fs::write(
+            path.join(&relative),
+            format!("{}\n", serde_json::to_string_pretty(&scenario)?),
+        )?;
+        scenarios.push(relative);
     }
-    let demo = serde_json::json!({"schema_version":1,"id":demo_id,"name":"Browser requests","project":"Demio","description":"Submit and approve local browser requests using shared components.","workspace":".","adapter":[".venv/bin/python","-u","shared/adapter.py"],"session_seconds":7200,"parameters":{"summary":"New laptop for the design team","reason":"Our current laptop needs replacement.","start_path":"/"},"scenarios":["scenarios/request/scenario.json","scenarios/expedited/scenario.json"]});
+    let demo = serde_json::json!({
+        "schema_version":1,
+        "id":demo_id,
+        "name":"Demio rehearsals",
+        "project":"Demio",
+        "description":"Rehearse browser actions, presenter controls and a native Mac file walkthrough.",
+        "workspace":".",
+        "adapter":[".venv/bin/python","-u","shared/web.py"],
+        "scenarios":scenarios
+    });
     fs::write(
         path.join("demo.json"),
         format!("{}\n", serde_json::to_string_pretty(&demo)?),
     )?;
-    for (variant, identity) in [("request", first_id), ("expedited", second_id)] {
-        let mut scenario: serde_json::Value =
-            serde_json::from_str(include_str!("../../examples/browser/channel.json"))?;
-        for key in ["adapter", "workspace", "project", "session_seconds"] {
-            scenario
-                .as_object_mut()
-                .context("Invalid example")?
-                .remove(key);
-        }
-        scenario["id"] = identity.into();
-        scenario["demo"] = "../../demo.json".into();
-        scenario["created_at"] = serde_json::to_value(registry::now())?;
-        if variant == "expedited" {
-            scenario["name"] = "Expedited request".into();
-            scenario["description"] =
-                "Approve an urgent laptop request using the same shared actions.".into();
-            scenario["parameters"] = serde_json::json!({"summary":"Urgent laptop replacement","reason":"The current laptop stopped working."});
-            scenario["steps"][1]["say"] =
-                "I enter the urgent replacement request and explain why it needs priority.".into();
-        }
-        fs::write(
-            path.join(format!("scenarios/{variant}/scenario.json")),
-            format!("{}\n", serde_json::to_string_pretty(&scenario)?),
-        )?;
-    }
     for (name, content) in [
         ("AGENTS.md", include_str!("../../templates/demo/AGENTS.md")),
         ("README.md", include_str!("../../templates/demo/README.md")),
         (
-            "shared/adapter.py",
-            include_str!("../../examples/browser/adapter.py"),
+            "shared/web.py",
+            include_str!("../../examples/browser/web.py"),
         ),
         (
-            "shared/index.html",
-            include_str!("../../examples/browser/index.html"),
+            "shared/mac_file.py",
+            include_str!("../../examples/mac/mac_file.py"),
         ),
     ] {
         fs::write(path.join(name), content)?;
     }
     println!(
-        "Created demo {} with two scenarios and shared components. Read AGENTS.md and agree the brief in README.md before adapting it. Next: demio register {}/demo.json",
+        "Created demo {} with browser and Mac rehearsals. See README.md for setup. Register with demio register {}/demo.json",
         path.display(),
         path.display()
     );

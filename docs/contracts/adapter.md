@@ -41,8 +41,13 @@ timestamps are stable. Step IDs must match adapter operations. Shared code
 belongs in shared/ or the demo's established common location; do not duplicate
 adapters merely for narration or route differences.
 
-Each step supplies id, title, role, say, and optional wait (what to wait for
-before pressing F9, and why; shown in red) and timeout_seconds (120 by default). Session seconds default to 7200. Narration is spoken by the presenter;
+Each scenario can supply an intro cue for step zero, separate from the first
+action. Selecting a scenario displays the intro. Start scenario launches the
+adapter and calls prepare; a successful reply reveals step one.
+
+Each step supplies id, title, role, say, and optional wait (a tip shown in red),
+confirm (true to require presenter confirmation after a successful run), and
+timeout_seconds (120 by default). Session seconds default to 7200. Narration is spoken by the presenter;
 role labels do not switch application accounts. Neither registration nor doctor
 proves that product actions are safe or successful. Verify visible results and
 appropriate failure boundaries. Never infer credentials, write permission or a
@@ -76,32 +81,39 @@ active numeric request ID and one of these events:
 {"id":1,"event":"done","ok":true}
 ```
 
+Set optional `"waiting": true` on a status event to display Waiting with this
+detail. An adapter can use this while polling an application result or waiting
+for a timer. Send done after verifying the expected result for this request.
+
 Failure example:
 
 ```json
 {"id":1,"event":"done","ok":false,"error":"Approval did not become visible"}
 ```
 
-Only `done` with `ok: true` marks a step complete. Out-of-order IDs, malformed
-JSON, EOF, errors, and timeouts fail the operation. There are no automatic retries
-because a write may already have happened. Stop and inspect the project before
-starting a fresh session. The adapter should not reply before verification.
+A matching `done` with `ok: true` completes an automatic step and unlocks
+presenter confirmation for a gated step. An explicit `ok: false` on a run step
+allows the presenter to confirm a verified manual completion. Out-of-order IDs,
+malformed JSON, EOF and timeouts leave the outcome unknown. The presenter can
+inspect and stop the session before starting a fresh run.
 
 Keep browsers and application state in the persistent process. Store disposable
 profiles in the session directory. Do not detach/daemonize children. Demio sends
 cleanup, then terminates the adapter's process group on exit. Releasing external
 resources and budgets remains the adapter's responsibility. `--auto` deliberately
-executes all steps; use only after the project authorizes those actions.
-`--dry-run` executes none: Demio sends only `rehearse` and `cleanup`, and an
+executes all automatic steps; any confirmation requirement refuses the scripted
+run before preparation. `--dry-run` sends only `rehearse` and `cleanup` after
+explicit Start, and an
 adapter that refuses `rehearse` leaves the dry run as narration only.
 
 ## Native windows
 
-The macOS helper reads `panel.json` from the owned session directory and sends
-`next` / `previous` commands to the Rust CLI. It never invokes an adapter itself.
-The combined presenter window contains Back/Next and the active step's `say`
-text and role, and retains user-adjusted position and size during the session.
-The window closes when the CLI exits. F7/F9 work globally; no F1 hide/show control exists.
+The macOS helper reads `panel.json` from the owned session directory. It
+displays the CLI's available actions and returns a command with the visible
+frame's generation. The CLI discards commands from old frames. Stop works
+in every phase. The presenter combines controls, status and notes in one
+window that retains its position and size for the session. F7/F9 handle only
+Back and Next.
 
 ## Transfer to another machine
 

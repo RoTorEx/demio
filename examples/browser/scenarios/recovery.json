@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "id": "browser-recovery",
+  "name": "Wikipedia manual recovery",
+  "description": "Correct a failed section check by opening and verifying the expected section yourself.",
+  "intro": "Welcome. We will recover a failed browser check by correcting the visible page and confirming the result.",
+  "parameters": {
+    "route": "recovery"
+  },
+  "steps": [
+    {
+      "id": "biography",
+      "title": "Open Biography",
+      "role": "Presenter",
+      "say": "I open Biography from the article's contents and leave that section selected."
+    },
+    {
+      "id": "check-work",
+      "title": "Check for the Work section",
+      "role": "Presenter",
+      "say": "The check expects Work. If it fails, open Work from Wikipedia's contents, verify the heading, and choose Confirm completion."
+    },
+    {
+      "id": "read-work",
+      "title": "Read the recovered section",
+      "role": "Presenter",
+      "say": "I show the Work heading after verifying that the browser reached it."
+    }
+  ]
+}
