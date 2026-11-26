@@ -4,37 +4,50 @@ This folder owns one demo. demo.json defines its shared identity, environment,
 adapter, parameters and scenario list. Each scenarios/<variant>/scenario.json
 owns a route, introduction, ordered steps, narration and parameter overrides.
 
-## Rehearse
+## Recommended rehearsals
 
 | Scenario | What to check |
 | --- | --- |
 | Wikipedia · Grace Hopper | Type the Wikipedia address, search for the name, scroll through the article, and click the tab's close button. |
 | Katherine Johnson · Follow Hidden Figures | Find the biography, follow its link to Hidden Figures, and wait for the linked article to load. |
+| Alan Turing · Jump with the contents | Search for Alan Turing and use the article's table of contents to reach Career and research. |
 | Ada Lovelace · Wikipedia and Wikidata | Open the article, scroll, follow its Wikidata link into a second tab, and return to Wikipedia. |
 | IANA download, timer and confirmation | Click Release History and the published release. Wait through the reading timer, verify the downloaded archive and choose Confirm. Return to the history and close. |
-| Mac file walkthrough | Type cd, touch, cat, echo, and cat in a fresh Terminal window with a one-second pause after each command. The greeting stays in the file. |
+| Mac file walkthrough | Type cd and check the directory, then use touch, cat, echo and cat in a fresh Terminal window. The greeting stays in the file. |
 
 The public routes need internet access, Python 3.10 or later, and Google Chrome
 in `/Applications`. Allow Accessibility for the app that launches Demio
-in System Settings. Start opens a blank tab in an isolated profile. The first
+in System Settings. Keep the presenter window open and place it where it leaves
+the demo app's controls visible. Start opens a blank tab in an isolated profile. The first
 Forward types the site address. The search uses Wikipedia's
 own field and matching suggestion. Keep the rehearsal tabs in their original
 order. If you switch apps or tabs or open a different page, **Back** shows
 earlier cues. Restore the rehearsal view and choose **Check route** to
 re-enable **Forward**. The Mac route
 defaults to `~/Desktop`.
+It checks the owned Terminal window and tab at step boundaries and before
+typing. If focus changed, restore that Terminal window and choose **Check route**.
 Set `parameters.directory` in `scenarios/mac-file/scenario.json` to choose an
 existing writable folder. macOS may request Automation access for Terminal. The
 finished document remains in the chosen folder.
 
 For a product demo, follow AGENTS.md and retain its agreed brief here.
 
+## Demo and scenario format
+
+Use these rehearsals as models. Name the selector group in `demo.json` and
+list each scenario there. Keep a six-character ID separate from each readable
+scenario name. Give each route its own outcome, application type, description,
+step-zero introduction and ordered visible actions.
+
 Metadata and narration belong in scenario JSON; route/input differences belong
 in parameters. Clicks, account switching and visible-result checks belong in the
 shared adapter. Adding a step requires matching adapter behavior for its ID.
 Separate different transcript topics with blank lines. Use angle brackets for
 short cues the presenter keeps private, such as `<Pause for the result>`.
-Do not change existing scenario IDs or original creation timestamps during edits.
+Preserve existing scenario IDs and original creation timestamps. Describe the
+real condition behind each wait or confirmation. Before delivery, rehearse the
+full route, the relevant recovery and Stop behavior, and check the final result.
 
 ## Prepare and launch
 

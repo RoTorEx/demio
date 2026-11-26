@@ -2,10 +2,12 @@
 
 Use the [generated rehearsals](../../README.md#rehearsals) to browse
 Grace Hopper's article, follow Katherine Johnson into Hidden Figures or Ada
-Lovelace into Wikidata, and wait for an IANA download. Each scenario JSON owns its cue and ordered
+Lovelace into Wikidata, jump to a section in Alan Turing's article, and wait for
+an IANA download. Each scenario JSON owns its cue and ordered
 steps. `web.py` owns the shared Chrome actions and visible checks.
 
-The standalone `channel.json` uses the stable ID `browser-demo`. It starts
+`demio init` includes the Alan Turing route. The same route is available in
+standalone `channel.json`, which uses the stable ID `browser-demo`. It starts
 in an empty Chrome tab, enters Wikipedia's address, searches Alan Turing,
 opens his article and jumps to Career and research using the table of
 contents. It clicks the tab's close button at the end. Install Python 3.10

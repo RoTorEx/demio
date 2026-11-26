@@ -46,11 +46,10 @@ enum NativeInput {
             let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
             let target = try ActiveWindow(pid: pid, bundle: "com.apple.Terminal")
             try target.verifyTerminalBounds(arguments[3])
-            if arguments[1] == "click" {
-                let prompt = try target.find("Terminal prompt") { _, role in role == "AXTextArea" }
-                try target.click(prompt)
-            }
             let input = try target.focusedElement()
+            if arguments[1] == "click" {
+                try target.click(input) { try target.verify(focused: input) }
+            }
             try target.key(CGKeyCode(kVK_ANSI_U), flags: .maskControl, focused: input)
             try target.type(text, focused: input)
         default:
@@ -79,6 +78,9 @@ private struct ActiveWindow {
     let app: AXUIElement
     let window: AXUIElement
     let source = CGEventSource(stateID: .privateState)
+    private let stopPath = ProcessInfo.processInfo.environment["DEMIO_SESSION_DIR"].map {
+        URL(fileURLWithPath: $0).appendingPathComponent("stopping").path
+    }
 
     init(pid: pid_t, bundle: String) throws {
         guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
@@ -96,6 +98,9 @@ private struct ActiveWindow {
     }
 
     func verify(focused expected: AXUIElement? = nil) throws {
+        if let stopPath, FileManager.default.fileExists(atPath: stopPath) {
+            throw InputFailure(message: "Scenario stopped.")
+        }
         guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
               let current = elementAttribute(app, kAXFocusedWindowAttribute), CFEqual(window, current) else {
             throw InputFailure(message: "Return to the rehearsal window.", offRoute: true)
@@ -146,13 +151,18 @@ private struct ActiveWindow {
                 })
             }
         }
+        func verifyTab() throws {
+            guard attribute(tab, kAXSelectedAttribute) as? Bool == true else {
+                throw InputFailure(message: "Return to the rehearsal tab in Chrome.", offRoute: true)
+            }
+        }
         if let button = try? closeButton() {
-            try click(button)
+            try click(button, beforePress: verifyTab)
             return
         }
         try move(to: center(of: tab))
         Thread.sleep(forTimeInterval: 0.18)
-        try click(closeButton())
+        try click(closeButton(), beforePress: verifyTab)
     }
 
     func bounds(of element: AXUIElement) throws -> CGRect {
@@ -200,7 +210,7 @@ private struct ActiveWindow {
         }
     }
 
-    func click(_ control: AXUIElement) throws {
+    func click(_ control: AXUIElement, beforePress: () throws -> Void = {}) throws {
         let position = try center(of: control)
         try move(to: position)
         try verify()
@@ -214,6 +224,7 @@ private struct ActiveWindow {
               let hit, AXUIElementGetPid(hit, &hitPID) == .success, hitPID == pid else {
             throw InputFailure(message: "Uncover the rehearsal control before continuing.", offRoute: true)
         }
+        try beforePress()
         for kind in [CGEventType.leftMouseDown, .leftMouseUp] {
             guard let event = CGEvent(mouseEventSource: source, mouseType: kind,
                                       mouseCursorPosition: position, mouseButton: .left) else {

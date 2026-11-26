@@ -291,6 +291,10 @@ fn scaffold(path: &Path) -> Result<()> {
             "grace-hopper",
             include_str!("../../examples/browser/scenarios/grace-hopper.json"),
         ),
+        (
+            "alan-turing",
+            include_str!("../../examples/browser/channel.json"),
+        ),
         ("mac-file", include_str!("../../examples/mac/scenario.json")),
     ];
     fs::create_dir_all(path.join("shared"))?;
@@ -304,6 +308,15 @@ fn scaffold(path: &Path) -> Result<()> {
             identity = id()?;
         }
         let mut scenario: serde_json::Value = serde_json::from_str(template)?;
+        if variant == "alan-turing" {
+            // The standalone example declares defaults that the scaffold inherits.
+            let fields = scenario
+                .as_object_mut()
+                .context("Expected a scenario object")?;
+            for field in ["workspace", "adapter", "project"] {
+                fields.remove(field);
+            }
+        }
         scenario["id"] = identity.into();
         scenario["demo"] = "../../demo.json".into();
         scenario["created_at"] = serde_json::to_value(registry::now())?;

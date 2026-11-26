@@ -1,5 +1,5 @@
 use crate::{
-    protocol::{Event, Rejected, RouteChanged, SessionExpired, Worker},
+    protocol::{Controls, Event, Rejected, RouteChanged, SessionExpired, Worker},
     registry::{Channel, atomic_write},
 };
 use anyhow::{Context, Result, bail};
@@ -63,8 +63,8 @@ struct Display<'a> {
     can_previous: bool,
     reviewing: bool,
 }
-/// Red marks a step's wait tip; `paint` restores the theme colour after it.
-const RED: &str = "\x1b[1;31m";
+/// Yellow marks a step's wait tip; `paint` restores the theme colour after it.
+const YELLOW: &str = "\x1b[1;33m";
 const RESET: &str = "\x1b[0m";
 struct Screen;
 impl Screen {
@@ -160,7 +160,7 @@ fn terminal_text(name: &str, display: &Display) -> String {
         String::new()
     } else {
         format!(
-            "{RED}Wait: {}{RESET}\r\n\r\n",
+            "{YELLOW}Wait: {}{RESET}\r\n\r\n",
             display.wait.replace('\n', "\r\n")
         )
     };
@@ -205,7 +205,7 @@ fn paint(text: &str, theme: &str) -> Result<()> {
 }
 pub fn doctor(channel: &Channel, manifest: &Path, cancelled: &AtomicBool) -> Result<()> {
     let scratch = Scratch::new()?;
-    let worker = Worker::start(channel, manifest, &scratch.0, true)?;
+    let worker = Worker::start(channel, manifest, &scratch.0, Controls::Automatic)?;
     worker.send("check", None, 30)?;
     let result = worker.wait(cancelled, None);
     worker.cleanup(None);
@@ -373,6 +373,7 @@ struct Presenter {
     generation: u64,
     deadline: Option<Instant>,
     guarded: bool,
+    monitor_route: bool,
     can_restore_route: bool,
     route_check: Option<RouteCheck>,
     next_route_check: Instant,
@@ -395,6 +396,7 @@ impl Presenter {
             generation: 0,
             deadline: None,
             guarded: false,
+            monitor_route: true,
             can_restore_route: false,
             route_check: None,
             next_route_check: Instant::now(),
@@ -538,7 +540,7 @@ impl Presenter {
                 "Checking the rehearsal view…",
             );
         } else if !matches!(intent, RouteIntent::Monitor) {
-            self.change(Phase::CheckingRoute, "Checking the rehearsal tab and page…");
+            self.change(Phase::CheckingRoute, "Checking the rehearsal view…");
         }
         if let Some(check) = &mut self.route_check {
             debug_assert_eq!(check.index, index);
@@ -649,6 +651,7 @@ impl Presenter {
                     == Some(true);
                 self.can_restore_route =
                     self.guarded && reply["restore_route"].as_bool() == Some(true);
+                self.monitor_route = reply["monitor_route"].as_bool().unwrap_or(true);
                 self.prepare_forward(channel, worker);
             }
             (Work::Prepare, Err(error)) => {
@@ -768,7 +771,7 @@ fn auto_run(
         bail!("This scenario requires presenter confirmation. Run it interactively.");
     }
     let scratch = Scratch::new()?;
-    let worker = Worker::start(channel, manifest, &scratch.0, true)?;
+    let worker = Worker::start(channel, manifest, &scratch.0, Controls::Automatic)?;
     let mut position = Position::default();
     let mut prepared = false;
     let mut deadline = None;
@@ -914,7 +917,12 @@ pub fn run(
                     } else {
                         ("prepare", channel.steps[0].timeout_seconds)
                     };
-                    let started = Worker::start(&channel, &manifest, &scratch.0, no_overlay)
+                    let controls = if no_overlay {
+                        Controls::Terminal
+                    } else {
+                        Controls::Presenter
+                    };
+                    let started = Worker::start(&channel, &manifest, &scratch.0, controls)
                         .and_then(|worker| {
                             worker.send(op, None, timeout)?;
                             Ok(worker)
@@ -1005,7 +1013,8 @@ pub fn run(
                     }
                 }
             }
-            let monitor_due = matches!(presenter.phase, Phase::Ready)
+            let monitor_due = presenter.monitor_route
+                && matches!(presenter.phase, Phase::Ready)
                 && presenter.route_check.is_none()
                 && Instant::now() >= presenter.next_route_check;
             if let Some(index) = presenter.guarded_step(total).filter(|_| monitor_due) {

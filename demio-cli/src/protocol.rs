@@ -5,7 +5,7 @@ use std::{
     fs,
     io::{BufRead, BufReader, Read, Write},
     os::unix::process::CommandExt,
-    path::Path,
+    path::{Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
     sync::{
         Arc, Mutex,
@@ -99,11 +99,18 @@ pub struct Operation {
     pub timeout: u64,
 }
 pub struct Worker {
+    session: PathBuf,
     tx: Option<Sender<Operation>>,
     pub events: Receiver<Event>,
     progress: Arc<Mutex<Option<Progress>>>,
     child: Arc<Mutex<Child>>,
     handle: Option<JoinHandle<()>>,
+}
+
+pub enum Controls {
+    Presenter,
+    Terminal,
+    Automatic,
 }
 struct Adapter {
     stdin: ChildStdin,
@@ -180,7 +187,7 @@ impl Worker {
         channel: &Channel,
         manifest: &Path,
         session: &Path,
-        terminal_controls: bool,
+        controls: Controls,
     ) -> Result<Self> {
         fs::create_dir_all(session)?;
         let workspace = channel.workspace_path(manifest)?;
@@ -197,7 +204,19 @@ impl Worker {
             )
             .env(
                 "DEMIO_TERMINAL_CONTROLS",
-                if terminal_controls { "1" } else { "0" },
+                if matches!(controls, Controls::Presenter) {
+                    "0"
+                } else {
+                    "1"
+                },
+            )
+            .env(
+                "DEMIO_INTERACTIVE_TERMINAL",
+                if matches!(controls, Controls::Terminal) {
+                    "1"
+                } else {
+                    "0"
+                },
             )
             .env(
                 "DEMIO_PARAMETERS",
@@ -238,6 +257,7 @@ impl Worker {
             }
         });
         Ok(Self {
+            session: session.to_path_buf(),
             tx: Some(tx),
             events,
             progress,
@@ -290,6 +310,8 @@ impl Worker {
         }
     }
     pub fn cleanup(&self, deadline: Option<Instant>) {
+        // Let in-flight native input stop before the cleanup request reaches the adapter.
+        let _ = fs::write(self.session.join("stopping"), []);
         let now = Instant::now();
         let grace = now + Duration::from_secs(2);
         let end = deadline.map_or(grace, |deadline| deadline.min(grace));

@@ -48,6 +48,10 @@ BrowserType.launch_persistent_context = inspect
                                 text=True, timeout=90)
         assert result.returncode == 0, (args, result.stdout, result.stderr)
 
+    def inspect_browser(session):
+        port = int((session / 'browser/DevToolsActivePort').read_text().splitlines()[0])
+        return observer.chromium.connect_over_cdp(f'http://127.0.0.1:{port}', no_defaults=True)
+
     cli('init', demo)
     manifest = demo / 'demo.json'
     definition = json.loads(manifest.read_text())
@@ -81,9 +85,9 @@ BrowserType.launch_persistent_context = inspect
         document = scenarios['timeout' if variant == 'event' else variant]
         master, slave = pty.openpty()
         run_env = dict(env)
-        if variant != 'waiting':
-            run_env['PYTHONPATH'] = str(inspection)
-        process = subprocess.Popen([binary, 'run', document['id'], '--no-overlay'],
+        run_env['PYTHONPATH'] = str(inspection)
+        controls = [] if '--headed' in sys.argv[2:] else ['--no-overlay']
+        process = subprocess.Popen([binary, 'run', document['id'], *controls],
                                    stdin=slave, stdout=slave, stderr=slave, env=run_env)
         os.close(slave)
 
@@ -108,8 +112,7 @@ BrowserType.launch_persistent_context = inspect
             _, first = expect('Ready', 1)
             assert first['say'] == document['steps'][0]['say']
             if variant != 'waiting':
-                debug_port = int((session / 'browser/DevToolsActivePort').read_text().splitlines()[0])
-                chrome = observer.chromium.connect_over_cdp(f'http://127.0.0.1:{debug_port}')
+                chrome = inspect_browser(session)
                 page = chrome.contexts[0].pages[0]
                 assert page.url == 'https://www.wikipedia.org/'
                 page.evaluate("""() => {
@@ -193,8 +196,31 @@ BrowserType.launch_persistent_context = inspect
                 expect('Awaiting confirmation', download_step)
                 os.write(master, b'c')
                 expect('Ready', download_step)
+                # Attach after download verification so the observer does not change its handling.
+                chrome = inspect_browser(session)
+                page = chrome.contexts[0].pages[0]
+                # Simulate a late layout shift while the pointer moves toward the breadcrumb.
+                breadcrumb = page.locator('a[href="/time-zones/releases"]').filter(
+                    has_text='Time Zone Database Releases'
+                )
+                breadcrumb.evaluate("""link => {
+                    document.addEventListener('mousemove', () => {
+                        const previous = link.getBoundingClientRect();
+                        link.style.position = 'relative';
+                        link.style.top = '-40px';
+                        const hit = document.elementFromPoint(previous.x + previous.width / 2,
+                                                              previous.y + previous.height / 2);
+                        sessionStorage.setItem('historyLinkMoved', String(!link.contains(hit)));
+                    }, {once: true});
+                    document.addEventListener('click', () => {
+                        const count = Number(sessionStorage.getItem('historyClicks') || 0);
+                        sessionStorage.setItem('historyClicks', String(count + 1));
+                    }, {capture: true});
+                }""")
                 os.write(master, next_key)
                 expect('Ready', download_step + 1)
+                assert page.evaluate("sessionStorage.getItem('historyLinkMoved')") == 'true'
+                assert page.evaluate("sessionStorage.getItem('historyClicks')") == '1'
                 os.write(master, next_key)
                 expect('Finished', download_step + 2)
             else:

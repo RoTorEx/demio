@@ -46,7 +46,7 @@ Each scenario can supply an intro cue for step zero, separate from the first
 action. Selecting a scenario displays the intro. Start scenario launches the
 adapter and calls prepare; a successful reply reveals step one.
 
-Each step supplies id, title, role, say, and optional wait (a tip shown in red),
+Each step supplies id, title, role, say, and optional wait (a tip shown in yellow),
 confirm (true to require presenter confirmation after a successful run), and
 timeout_seconds (120 by default). Session seconds default to 7200. Narration is spoken by the presenter;
 role labels do not switch application accounts. Neither registration nor doctor
@@ -106,7 +106,8 @@ A successful prepare reply can opt into interactive route verification by
 returning `"verify_route": true`. Verify receives the upcoming step ID and checks
 the live view without changing focus, opening tabs or issuing input. Demio
 checks before enabling Forward, each half second while ready, and before
-dispatch. A rejected check keeps the same step pending. After restoring the
+dispatch. An adapter can return `"monitor_route": false` on prepare to check
+at step boundaries without a background timer. A rejected check keeps the same step pending. After restoring the
 view the presenter explicitly chooses Check route. A run reply can include
 `"ok": false, "route_changed": true` for a detour before a business mutation.
 Demio treats that result as a route check rather than manual step completion.
@@ -117,11 +118,14 @@ Keep the pending step unexecuted and any business effects out of restoration.
 The request uses the pending step's timeout. An adapter that only supports
 `verify` receives another read-only check.
 Adapters receive `DEMIO_TERMINAL_CONTROLS=1` in terminal-only and automatic
-runs, where the terminal may hold keyboard focus.
+runs, where the terminal may hold keyboard focus. `DEMIO_INTERACTIVE_TERMINAL=1`
+identifies interactive `--no-overlay` runs. The bundled live native-input
+examples require the presenter window for interactive use.
 
 Keep browsers and application state in the persistent process. Store disposable
 profiles in the session directory. Do not detach or daemonize children. Stop
-gives the adapter up to two seconds to reply to cleanup before Demio terminates
+marks `stopping` in the session directory so native input can exit promptly.
+It gives the adapter up to two seconds to reply to cleanup before Demio terminates
 its process group. The session limit bounds this grace period when the action's
 outcome is pending or unknown. The adapter owns release of external resources
 and budgets. `--auto` deliberately

@@ -23,6 +23,37 @@ parameters. Scenarios own their names, descriptions, timestamps, step order,
 narration and parameter overrides. Existing demos can keep shared modules in an
 established root location; shared/ is the new scaffold convention.
 
+## Format for demos and scenarios
+
+- Use a named demo folder for each group in the selector. Name the group in
+  `demo.json` and list its scenarios there. Use the `project` field for the
+  product name. A scenario has a readable name and a separate six-character
+  alphanumeric ID. Keep the original ID and creation time when editing legacy or
+  registered scenarios.
+- Put each route in `scenarios/<variant>/scenario.json`, with `type`,
+  `description`, a distinct `intro` and ordered `steps`. The introduction is
+  step zero. Start prepares the target and Forward runs the first action. Give
+  each route a clear outcome and a distinct reason to exist.
+- Give each step a short action title, an adapter step ID, a presenter role,
+  and text in `say` suitable for speaking. Put fixed cues in `wait` and let the
+  adapter report changing status. In transcripts, use paragraphs for separate topics
+  and angle brackets for cues the presenter keeps private.
+- Show meaningful input visibly. Start browser rehearsals from a blank tab.
+  Use the real site's controls and explicit checks of the resulting page or UI.
+  Native routes begin with an owned window and use relative paths, a selectable
+  destination, or a documented prerequisite. Share input timing and actions
+  within each demo. Keep local accounts and paths out of public examples.
+- Use readiness checks for real dependencies and a timer for a deliberate pause.
+  Use Confirm when an actual outcome requires human verification. Make each
+  gate state what it is waiting for and keep Forward blocked until it clears.
+  Check route before acting, explain where to return on detours, and make Back
+  safe to use. Stop releases owned temporary resources and preserves declared
+  outputs.
+- Include setup, exact verification commands, and expected results in the demo
+  README. Record development token usage where counters are available. Rehearse
+  the full route and the applicable recovery, wait, and Stop states before
+  using it as a reference.
+
 Press e in the selector to open the owning demo root and selected JSON in VS
 Code. Press f to reveal that JSON in Finder. A missing file's surviving demo
 folder remains openable in Finder. These actions never execute the adapter.
@@ -30,7 +61,7 @@ folder remains openable in Finder. These actions never execute the adapter.
 ## Creating a demo with an agent
 
 `demio init ~/.toolbelt/demio/demos/my-demo` creates the whole structure, with
-four live browser rehearsals, a Mac file walkthrough, and their shared adapters.
+five live browser rehearsals, a Mac file walkthrough, and their shared adapters.
 Give the agent the demo folder with its AGENTS.md and README.md.
 AGENTS.md requires it to explain terminology and controls, discuss the
 audience, intended result, variants, environment, data, allowed writes/budgets,
@@ -39,10 +70,25 @@ choices before implementing behavior. The README retains the agreed brief.
 Existing decisions stay in effect; routine implementation choices do not need
 repeated approval. See [the authoring instructions](../templates/demo/AGENTS.md).
 
-Use the four generated browser rehearsals for live presentations.
-`examples/browser/channel.json` is a standalone example that searches for Alan
-Turing, jumps to a section, and closes the tab. It uses the same adapter as the scaffold
-and expects the Python environment described in the README beside the example.
+## Recommended rehearsals
+
+Use the bundled rehearsals as templates for new demos, groups and scenarios.
+Each browser route starts with a blank Chrome tab, types the site's address and
+finishes with a click on the tab's close button. All five use public sites.
+
+| Scenario | Reference behavior |
+| --- | --- |
+| [Wikipedia · Grace Hopper](../examples/browser/scenarios/grace-hopper.json) | Type a query, click the matching suggestion and scroll the article smoothly. |
+| [Katherine Johnson · Follow Hidden Figures](../examples/browser/scenarios/katherine-johnson.json) | Follow a link and wait for the expected article URL and heading. |
+| [Alan Turing · Jump with the contents](../examples/browser/channel.json) | Use the article's table of contents to reach Career and research. |
+| [Ada Lovelace · Wikipedia and Wikidata](../examples/browser/scenarios/navigation.json) | Open a second tab from a real link, return to Wikipedia and close both tabs. |
+| [IANA download, timer and confirmation](../examples/browser/scenarios/waiting.json) | Open release history, wait through a reading timer, verify the official archive and confirm before continuing. |
+| [Mac file walkthrough](../examples/mac/scenario.json) | Type `cd`, `touch`, `cat`, `echo` and `cat` in a fresh Terminal window. Leave the sample file containing `Hello Demio :D`. |
+
+[Set up and register the examples](../README.md#rehearsals). Generated IDs are
+local to each scaffold. Use `demio list` to find their IDs, then select the
+scenario or run `demio run ID`. The Alan Turing source also works as a standalone
+scenario with the stable ID `browser-demo`.
 
 ## Demo defaults and scenario differences
 
@@ -72,6 +118,7 @@ A scenario references its owner and changes only the necessary defaults:
   "name": "Role change",
   "type": "browser",
   "description": "Inspect retained access after a role change.",
+  "intro": "We will inspect how a role change affects access.",
   "parameters": {"query": "Find retained access"},
   "steps": [
     {"id": "show", "title": "Inspect access", "role": "Operator", "say": "I inspect the retained access."}
@@ -97,7 +144,7 @@ overrides resolve beside that scenario file. Commands execute in that workspace.
 | `steps[].title` | The step's human-readable heading. |
 | `steps[].role` | The role displayed to the presenter; it does not switch application accounts itself. |
 | `steps[].say` | Text the presenter reads aloud. It does not execute actions or synthesize speech. |
-| `steps[].wait` | Optional. What to wait for before advancing, such as a slow reply the next step depends on. Shown in red. |
+| `steps[].wait` | Optional. What to wait for before advancing, such as a slow reply the next step depends on. Shown as a yellow cue. The adapter completes the actual wait. |
 | `steps[].confirm` | Optional boolean. When true, a successful run waits for presenter confirmation before Next becomes available. |
 | `steps[].timeout_seconds` | Optional per-operation timeout: 1–3,600 seconds, default 120. |
 | `session_seconds` | Session time limit: 1–86,400 seconds, default 7,200. |
@@ -122,8 +169,8 @@ plus output. Cached input is included in input and displayed separately.
 identifies an estimate from shared work. The public examples use the actual
 counters from 43 recorded source-edit and browser verification requests.
 Requests shared by several scenarios are divided evenly among the applicable
-scenarios. The counts describe that sample of development work. Missing
-usage displays Unrecorded in Metadata.
+scenarios. The counts describe that sample of development work. The Development
+tokens section shows Unrecorded when usage is missing.
 
 A step object can look like this:
 

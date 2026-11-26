@@ -301,6 +301,13 @@ for line in sys.stdin:
     example=json.loads((root/'example/scenarios/navigation/scenario.json').read_text());assert example['created_at'] and example['demo']=='../../demo.json' and example['description']
     assert (root/'example/AGENTS.md').is_file() and (root/'example/README.md').is_file()
     cli('register',str(root/'example/demo.json'))
+    definition = json.loads((root/'example/demo.json').read_text())
+    assert {path.split('/')[1] for path in definition['scenarios']} == {
+        'navigation', 'waiting', 'katherine-johnson', 'grace-hopper', 'alan-turing', 'mac-file',
+    }
+    alan = json.loads((root/'example/scenarios/alan-turing/scenario.json').read_text())
+    assert alan['parameters']['query'] == 'Alan Turing'
+    assert set(alan).isdisjoint({'workspace', 'adapter', 'project'})
     cli('init',str(root/'example'),ok=False)
     cli('theme','ocean');assert 'ocean *' in cli('themes').stdout
     cli('theme','unknown',ok=False)

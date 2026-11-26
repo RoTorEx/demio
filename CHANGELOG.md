@@ -30,6 +30,14 @@
   on disk. Slow pointer movement and typing across the visible input.
 - Mark the edges of the scrolling notes area and use yellow for wait cues and
   confirmation.
+- Generate all six recommended rehearsals in `demio init` and document their
+  shared demo, group and scenario format.
+- Recover an expected Wikidata tab after a manually completed step. Verify
+  Terminal's working directory and stop native input promptly when stopping a
+  run. Show a preparation error if a live interactive rehearsal needs the
+  presenter window.
+- Recheck browser link positions before clicking when page layout changes
+  during pointer movement.
 
 ## [0.2.1] - 2026-11-26
 

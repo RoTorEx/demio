@@ -55,6 +55,8 @@ class BrowserInput:
         self.position = None
         self.focus_required = focus_required
         self.focus_path = None
+        session_dir = os.environ.get("DEMIO_SESSION_DIR")
+        self.stop_path = Path(session_dir) / "stopping" if session_dir else None
         self.chrome_pid = None
         self.warp = None
         if not headless and sys.platform == "darwin":
@@ -92,6 +94,8 @@ class BrowserInput:
         raise RuntimeError("Could not identify the owned Chrome process.")
 
     def verify_focus(self):
+        if self.stop_path and self.stop_path.exists():
+            raise RuntimeError("Scenario stopped.")
         if self.focus_required:
             try:
                 focused_pid = int(self.focus_path.read_text())
@@ -150,12 +154,26 @@ class BrowserInput:
             self.wheel(page, max(-560, min(560, round(delta))))
         else:
             raise RuntimeError("The expected control did not scroll into view.")
-        self.move(page, x, y)
-        if not target.evaluate(
-            "(element, [x, y]) => element.contains(document.elementFromPoint(x, y))",
-            [x, y],
-        ):
-            raise RuntimeError("Another element covers the expected control.")
+        for attempt in range(2):
+            self.move(page, x, y)
+            visible, hit, new_center = target.evaluate(
+                """(element, [x, y]) => {
+                    const hits = (a, b) => element.contains(document.elementFromPoint(a, b));
+                    const rect = element.getBoundingClientRect();
+                    const next = [rect.x + rect.width / 2, rect.y + rect.height / 2];
+                    return [!document.hidden, hits(x, y), hits(...next) ? next : null];
+                }""",
+                [x, y],
+            )
+            if not visible:
+                raise RouteChanged("Return to the rehearsal tab in Chrome.")
+            if hit:
+                break
+            if attempt or new_center is None or new_center == [x, y]:
+                raise RuntimeError("Another element covers the expected control.")
+            # Fonts or layout may finish loading during the pointer movement.
+            x, y = new_center
+        self.verify_focus()
         if modifier:
             page.keyboard.down(modifier)
         try:
@@ -172,6 +190,8 @@ class BrowserInput:
         sent = 0
         frames = max(16, min(48, abs(distance) // 20))
         for frame in range(1, frames + 1):
+            if frame % 6 == 0:
+                self.verify_focus()
             traveled = round(distance * ease(frame / frames))
             if traveled != sent:
                 page.mouse.wheel(0, traveled - sent)
@@ -235,6 +255,8 @@ class Walkthrough:
         from playwright.sync_api import sync_playwright
 
         if self.native_chrome:
+            if os.environ.get("DEMIO_INTERACTIVE_TERMINAL") == "1":
+                raise RuntimeError("Open this visible Chrome rehearsal with the presenter window.")
             native_input("check")
         self.playwright = sync_playwright().start()
         self.context = self.playwright.chromium.launch_persistent_context(
@@ -293,7 +315,12 @@ class Walkthrough:
                 page, tabs, url = self.data_tab, [self.data_tab], WIKIDATA
             elif step == "return":
                 page = self.data_tab
-                tabs.append(self.data_tab)
+                # A presenter may have opened Wikidata manually after a failed step.
+                if page is None or page.is_closed():
+                    open_tabs = self.context.pages
+                    if len(open_tabs) == 2 and open_tabs[0] == self.page:
+                        page = open_tabs[1]
+                tabs.append(page)
             elif step == "close":
                 tabs.append(self.data_tab)
                 url = self.article + "#Biography"
@@ -324,6 +351,8 @@ class Walkthrough:
             raise RouteChanged("A rehearsal tab was closed. Stop and start a fresh run.")
         if self.context.pages != tabs:
             raise RouteChanged("Close extra tabs in the rehearsal window.")
+        if self.route == "navigation" and step == "return" and self.page.url.split("#", 1)[0] != self.article:
+            raise RouteChanged(f"Return the first tab to {self.query}'s article, then select Wikidata.")
         if current != url and not (step == "open-site" and current in BLANK_TABS):
             name = self.view_names.get(url, f"IANA release {self.parameters.get('release')}")
             raise RouteChanged(f"Return to {name} in the rehearsal tab.")
@@ -331,6 +360,8 @@ class Walkthrough:
             raise RouteChanged("Return to the rehearsal tab in Chrome.")
         if step in ("search", "open-article") and query is None:
             raise RouteChanged("Reload the Wikipedia search page.")
+        if self.route == "navigation" and step == "return":
+            self.data_tab = page
         return focused, query, result
 
     def verify_route(self, step):
@@ -371,7 +402,9 @@ class Walkthrough:
         if replace:
             field.press("Meta+A" if sys.platform == "darwin" else "Control+A")
             field.press("Backspace")
-        field.press_sequentially(self.query, delay=TYPE_DELAY_MS)
+        for letter in self.query:
+            self.input.verify_focus()
+            field.press_sequentially(letter, delay=TYPE_DELAY_MS)
         expect(field).to_have_value(self.query)
         self.result_link().wait_for(state="visible")
         self.page.wait_for_timeout(650)
@@ -443,7 +476,7 @@ class Walkthrough:
         elif step == "timer":
             deadline = time.monotonic() + 3
             for seconds in (3, 2, 1):
-                respond(request, "status", waiting=True, detail=f"Reading time: {seconds} seconds left.")
+                respond(request, "status", waiting=True, detail=f"Reading time: {seconds} s left.")
                 time.sleep(max(0, deadline - time.monotonic() - seconds + 1))
         elif step == "download":
             name = f"tzdata{release}.tar.gz"
@@ -462,7 +495,10 @@ class Walkthrough:
                 if not archive.getmember("europe").isfile():
                     raise RuntimeError("The archive is missing the expected time zone data.")
         elif step == "return":
-            self.input.click(self.page, self.page.locator('a[href="/time-zones/releases"]:visible').first)
+            breadcrumb = self.page.locator('a[href="/time-zones/releases"]').filter(
+                has_text="Time Zone Database Releases"
+            )
+            self.input.click(self.page, breadcrumb)
             self.verify_page(self.page, RELEASES, "Time Zone Database Releases")
         else:
             raise RuntimeError(f"Unknown download step: {step}")

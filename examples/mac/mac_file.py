@@ -15,6 +15,10 @@ GREETING = "Hello Demio :D\n"
 COMMAND_PAUSE_SECONDS = 1
 
 
+class RouteChanged(RuntimeError):
+    pass
+
+
 def terminal(script, *arguments):
     result = subprocess.run(
         ["/usr/bin/osascript", "-", *map(str, arguments)],
@@ -41,6 +45,8 @@ def native_input(*arguments):
         [helper, "--native-input", *arguments], capture_output=True, text=True,
         timeout=15 + 0.15 * sum(map(len, arguments)),
     )
+    if result.returncode == 3:
+        raise RouteChanged(result.stderr.strip())
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or "Could not type in the rehearsal Terminal.")
 
@@ -64,6 +70,8 @@ class Walkthrough:
         native_input("check")
 
     def prepare(self):
+        if os.environ.get("DEMIO_INTERACTIVE_TERMINAL") == "1":
+            raise RuntimeError("Open the Terminal rehearsal with the presenter window.")
         self.check()
         self.path = self.directory / f"demio-{secrets.token_hex(3)}.txt"
         if self.path.exists() or self.path.is_symlink():
@@ -76,30 +84,37 @@ class Walkthrough:
             "activate\n"
             "set demoWindow to window id demoID\n"
             "repeat 50 times\n"
-            "set demoTTY to tty of selected tab of demoWindow\n"
-            "if demoTTY is not missing value and demoTTY is not \"\" then exit repeat\n"
+            "set demoTab to selected tab of demoWindow\n"
+            "set demoTTY to tty of demoTab\n"
+            "if demoTTY is not missing value and demoTTY is not \"\" and not (busy of demoTab) then exit repeat\n"
             "delay 0.1\nend repeat\n"
             "return (demoID as text) & linefeed & (demoTTY as text)",
         ).splitlines()
         self.window = int(window)
 
-    def command(self, text, click=False):
-        bounds = terminal(
+    def check_window(self):
+        result = terminal(
+            'if application "Terminal" is not running then return "Return to the rehearsal Terminal window."\n'
+            'if not frontmost or (count windows) is 0 then return "Return to the rehearsal Terminal window."\n'
+            'if id of front window is not ((item 1 of argv) as integer) then return "Return to the rehearsal Terminal window."\n'
             "set demoWindow to window id ((item 1 of argv) as integer)\n"
-            "if id of front window is not id of demoWindow then error \"Return to the rehearsal Terminal window.\"\n"
-            "if tty of selected tab of demoWindow is not (item 2 of argv) then error \"Return to the rehearsal Terminal tab.\"\n"
-            "repeat 50 times\n"
-            "if not (busy of selected tab of demoWindow) then exit repeat\n"
-            "delay 0.1\nend repeat\n"
-            "if busy of selected tab of demoWindow then error \"The demo Terminal window is busy.\"\n"
+            'if tty of selected tab of demoWindow is not (item 2 of argv) then return "Return to the rehearsal Terminal tab."\n'
+            'if busy of selected tab of demoWindow then return "Wait until the rehearsal Terminal prompt is ready."\n'
             "return bounds of demoWindow",
             self.window, self.tty,
         )
+        if result.startswith(("Return", "Wait")):
+            raise RouteChanged(result)
+        return result
+
+    def command(self, text, click=False):
+        bounds = self.check_window()
         native_input("terminal", "click" if click else "type", text, bounds)
         time.sleep(COMMAND_PAUSE_SECONDS)
 
     def change_directory(self):
-        self.command(f"cd {self.folder_argument}", click=True)
+        self.command(f"cd {self.folder_argument} && pwd -P", click=True)
+        self.verify_output(str(self.directory))
 
     def file_argument(self):
         return f"{self.folder_argument}/{self.path.name}"
@@ -119,17 +134,20 @@ class Walkthrough:
     def show_file(self, expected):
         self.read_expected(expected)
         self.command(f"cat {self.file_argument()}")
+        self.read_expected(expected)
         if expected:
-            contents = terminal(
-                "set demoWindow to window id ((item 1 of argv) as integer)\n"
-                "if tty of selected tab of demoWindow is not (item 2 of argv) then error \"Return to the rehearsal Terminal tab.\"\n"
-                "return contents of selected tab of demoWindow",
-                self.window, self.tty,
-            )
-            lines = "\n".join(contents.splitlines())
-            message = expected.rstrip("\n")
-            if f"\n{message}\n" not in f"\n{lines}\n":
-                raise RuntimeError("The greeting did not appear in Terminal.")
+            self.verify_output(expected.rstrip("\n"))
+
+    def verify_output(self, expected):
+        contents = terminal(
+            "set demoWindow to window id ((item 1 of argv) as integer)\n"
+            "if tty of selected tab of demoWindow is not (item 2 of argv) then error \"Return to the rehearsal Terminal tab.\"\n"
+            "return contents of selected tab of demoWindow",
+            self.window, self.tty,
+        )
+        lines = "\n".join(contents.splitlines())
+        if f"\n{expected}\n" not in f"\n{lines}\n":
+            raise RuntimeError(f"The expected output did not appear in Terminal: {expected}")
 
     def read_expected(self, text):
         deadline = time.monotonic() + 8
@@ -200,6 +218,9 @@ def main():
                 walkthrough.check()
             elif operation == "prepare":
                 walkthrough.prepare()
+                reply.update(verify_route=True, monitor_route=False)
+            elif operation == "verify":
+                walkthrough.check_window()
             elif operation == "run":
                 walkthrough.run(request["step"])
             elif operation == "preview":
@@ -208,6 +229,8 @@ def main():
                 walkthrough.cleanup()
             else:
                 raise RuntimeError(f"Unsupported operation: {operation}")
+        except RouteChanged as error:
+            reply.update(ok=False, route_changed=True, error=str(error))
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
             reply.update(ok=False, error=str(error))
         print(json.dumps(reply), flush=True)

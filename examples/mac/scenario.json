@@ -5,11 +5,11 @@
   "type": "system",
   "development_tokens": {"input": 1009257, "cached_input": 999283, "output": 6111, "basis": "allocated"},
   "description": "Type short commands in a fresh Terminal window, create and read a small file, and leave it in the selected folder.",
-  "intro": "Welcome. We will go from an empty Terminal prompt to a small greeting saved on the desktop.",
+  "intro": "Welcome. We will go from an empty Terminal prompt to a small greeting saved in the chosen folder.",
   "adapter": ["python3", "-u", "shared/mac_file.py"],
   "parameters": {"directory": "~/Desktop"},
   "steps": [
-    {"id": "cd", "title": "Change to the destination folder", "role": "Presenter", "say": "I focus the Terminal prompt and type cd to move to the destination, which is the Desktop by default."},
+    {"id": "cd", "title": "Change to the destination folder", "role": "Presenter", "say": "I focus the Terminal prompt, type cd to go to the destination, and print the working directory. The default destination is the Desktop."},
     {"id": "touch", "title": "Create an empty file with touch", "role": "Presenter", "say": "I type touch followed by the new file name."},
     {"id": "empty", "title": "Check the empty file with cat", "role": "Presenter", "say": "I type cat. The prompt returns with no file content."},
     {"id": "write", "title": "Write Hello Demio :D", "role": "Presenter", "say": "I type an echo command to append Hello Demio :D to the file."},

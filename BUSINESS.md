@@ -76,8 +76,9 @@ manifest with explicit --replace. Standalone legacy manifests remain readable.
 Their metadata snapshots and demo membership remain visible when files become
 unavailable. One missing sibling does not invalidate a runnable scenario.
 
-The scaffold creates browser and native Mac rehearsals with local authoring
-instructions. The browser cases use public Wikipedia, Wikidata and IANA pages
+The scaffold creates five browser rehearsals and one native Mac rehearsal with
+local authoring instructions. These are the [recommended examples and format](docs/scenarios.md#format-for-demos-and-scenarios)
+for demos, selector groups and scenarios. The browser cases use public Wikipedia, Wikidata and IANA pages
 in an isolated Google Chrome profile. Start presents a blank tab. The first
 action types the site's address. The browser cases distinguish article
 scrolling, following a link and waiting for navigation, table-of-contents
@@ -91,6 +92,8 @@ the input. Terminal opens a fresh window and waits one second after each
 visible command. The sequence changes to the selected folder, creates a
 unique empty file, checks it with cat, appends `Hello Demio :D`, and reads the
 result. The folder defaults to the Desktop and the file stays there.
+Live manual Chrome and Terminal rehearsals use the presenter window so the
+target app can keep focus during visible input.
 Generated demo/scenario IDs use six
 alphanumeric characters. The authoring agent must explain terminology and
 controls, discuss audience/outcome/environment/allowed effects, propose a brief

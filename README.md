@@ -156,7 +156,8 @@ Malformed legacy JSON is preserved with a warning for manual recovery.
 F9 advances and F7 previews the previous completed step. Depending on your
 keyboard settings, use Fn+F9 / Fn+F7. In the terminal, s starts preparation,
 c confirms completion when offered, and q / Ctrl+C stops the session.
-**Stop** on the panel also ends the session. Use `--no-overlay` for terminal controls.
+**Stop** on the panel also ends the session. `--no-overlay` provides terminal
+controls for adapters that can run while the terminal has focus.
 
 Back and forward through completed steps show read-only previews. During
 preparation and waits, **Stop** is the available scenario action. **Confirm
@@ -171,8 +172,12 @@ On a detour, **Off route** turns red and **Info** shows where to return.
 Select **Check route** after restoring the expected view. Back in Wikipedia
 search, the check repeats the search if its result is missing. A successful
 check returns to the pending step and enables **Forward**.
-The terminal shortcut is r. With terminal-only controls, the terminal may
-retain keyboard focus while the expected Chrome tab is visible.
+The terminal shortcut is r. Run the bundled live rehearsals with their
+presenter window, so Chrome or Terminal can retain keyboard focus. Move the
+window away from the app controls the audience needs to see.
+The Terminal rehearsal checks its window and tab at step boundaries and
+before acting. If it asks for the rehearsal window or tab, return there and
+choose **Check route**.
 
 ### Dry run
 
@@ -192,7 +197,8 @@ with the legacy flag set. [ScreenCaptureKit capture filters](https://developer.a
 
 ## Rehearsals
 
-Use `demio init` in a fresh directory to generate the reference rehearsals.
+Use `demio init` in a fresh directory to generate the six recommended
+rehearsals and their adapters. Use them as models for new demos and groups.
 Install Python 3.10 or later and Google Chrome in `/Applications`. Give the
 app that launches Demio Accessibility access in System Settings for clicks
 and keystrokes in the Chrome toolbar and Terminal. Browser rehearsals use
@@ -203,8 +209,8 @@ The final action clicks the tab's close button.
 Start with **Wikipedia · Grace Hopper** for search, reading and scrolling.
 **Katherine Johnson · Follow Hidden Figures** follows a real link and waits
 for the destination to load. **Ada Lovelace · Wikipedia and Wikidata**
-demonstrates a second tab. The standalone Alan Turing example uses Wikipedia's
-table of contents to jump to Career and research.
+demonstrates a second tab. **Alan Turing · Jump with the contents** uses
+Wikipedia's table of contents to reach Career and research.
 **IANA download, timer and confirmation** waits for and verifies a published
 archive.
 
@@ -213,13 +219,18 @@ demio init ~/.toolbelt/demio/demos/my-demo
 cd ~/.toolbelt/demio/demos/my-demo
 python3 -m venv .venv
 .venv/bin/python -m pip install playwright==1.63.0
+demio validate demo.json
 demio register demo.json
 demio list
 demio
 ```
 
+Use `demio doctor ID` for each scenario ID printed by `demio list`. Press
+Enter in the selector to open a scenario, then **Start** and **Forward** in
+the presenter window. See the [recommended examples and authoring format](docs/scenarios.md#format-for-demos-and-scenarios).
+
 The Mac example opens a fresh Terminal window and types one command at a time.
-It changes to the Desktop, creates a unique file with touch, reads the empty
+It changes to the Desktop, checks the working directory, creates a unique file with touch, reads the empty
 file with cat, appends `Hello Demio :D`, and reads it again. It pauses one
 second after each command and leaves the file in its folder. macOS may ask
 for Automation access to Terminal. To choose a different destination, set `parameters.directory` in
@@ -256,7 +267,8 @@ files; project adapters still own external effects and project runtime data.
 
 Requires Rust 1.85+ and the macOS Command Line Tools. CLI, configuration, protocol,
 and step sequencing are Rust. A small Swift/AppKit helper supplies the native
-macOS windows and global F7/F9 keys; it performs no project actions.
+macOS windows and global F7/F9 keys. Its native input command sends clicks
+and keystrokes to the rehearsal window selected by the adapter.
 
 ```sh
 make install
